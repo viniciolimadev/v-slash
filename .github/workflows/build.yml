@@ -46,7 +46,10 @@ jobs:
         run: echo "GODOT=$HOME/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" >> "$GITHUB_ENV"
 
       - name: Import project
-        run: $GODOT --headless --import || true
+        run: |
+          # export/ (builds e prints do e2e) fica fora do projeto Godot
+          mkdir -p export && touch export/.gdignore
+          $GODOT --headless --import || true
 
       - name: Run tests
         run: |
@@ -88,9 +91,10 @@ jobs:
 
       - name: Mobile e2e (touch, headless Chromium)
         run: |
-          npm install --no-save --no-package-lock playwright@1.63.0
-          npx playwright install --with-deps chromium
-          node tests/e2e/mobile_smoke.js export/web export/e2e
+          # instalado fora do projeto: senão o Godot importa node_modules e põe no APK
+          npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock playwright@1.63.0
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node tests/e2e/mobile_smoke.js export/web export/e2e
 
       - uses: actions/upload-artifact@v4
         if: always()
