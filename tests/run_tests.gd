@@ -281,8 +281,16 @@ func _test_aim() -> void:
 	_check(game.human_aim.is_equal_approx(left_at), "apertar o botão não reposiciona a mira")
 	game.human_release(human)
 	_check(not game.human_aim_view().is_empty(), "mira continua visível depois do toque")
-	var rec: Vector3 = game._aims[Game.Act.RECEIVE]
-	_check(rec.z * s > 0.0, "mira da recepção é separada e continua no seu lado")
+	# a mira não pula quando a jogada muda (ex.: o bot ataca e vira recepção)
+	var before: Vector3 = game.human_aim
+	var acts := {}
+	for _i in int(20.0 / DT):
+		acts[game.current_act(human)] = true
+		game.tick(DT)
+		if not game.human_aim.is_equal_approx(before):
+			break
+	_check(game.human_aim.is_equal_approx(before) and acts.has(Game.Act.RECEIVE),
+			"bot ataca e vira recepção: a mira não se move sozinha (jogadas vistas: %s)" % [acts.keys()])
 	_free_main(main)
 
 
