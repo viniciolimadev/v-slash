@@ -26,6 +26,8 @@ func _run() -> void:
 	_test_touch_controls()
 	print("== HUD (layout) ==")
 	_test_hud_layout()
+	print("== mira ==")
+	_test_aim()
 	print("falhas: %d" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -188,7 +190,10 @@ func _test_scripted_human() -> void:
 			var t_ideal: float = game.plan["t"]
 			if not pressed and game.time >= t_ideal - 0.5:
 				game.human_press(human)
-				game.human_drag(human, Vector2(30.0, -20.0))
+				# como uma pessoa: olha onde a mira está e arrasta até o alvo (a mira persiste)
+				var want := game.default_aim(human) + Vector3(0.8, 0.0, -0.6)
+				var d := (want - game.human_aim) / Tuning.AIM_SENS
+				game.human_drag(human, Vector2(d.x, d.z))
 				pressed = true
 			elif pressed and game.time >= t_ideal - DT * 0.5:
 				game.human_release(human)
@@ -243,6 +248,39 @@ func _test_hud_layout() -> void:
 	var r := lvl.get_global_rect()
 	_check(r.position.x >= 0.0 and r.end.x <= screen.x and r.position.x > screen.x * 0.5,
 			"botão do nível do bot visível no canto direito (%s)" % r)
+	_free_main(main)
+
+
+func _test_aim() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	game.tick(DT)
+	var view := game.human_aim_view()
+	_check(not view.is_empty(), "mira aparece sem segurar o botão")
+	var s := Game.side_of_team(human.team)
+	var z: float = (view["pos"] as Vector3).z if not view.is_empty() else 0.0
+	_check(z * -s >= Tuning.AIM_DEEP - 0.01, "mira começa no fundo da quadra adversária (z=%.1f)" % z)
+	# arrasta e solta: a mira fica onde estava, também nas jogadas seguintes
+	var act := game.current_act(human)
+	game.human_press(human)
+	game.human_drag(human, Vector2(-120.0, 60.0))
+	var left_at: Vector3 = game.human_aim
+	_check(left_at.distance_to(Vector3(0.0, 0.0, -s * Tuning.AIM_DEEP)) > 1.0, "arrastar move a mira")
+	game.human_release(human)
+	var changed := false
+	for _i in int(6.0 / DT):
+		game.tick(DT)
+		if game.current_act(human) != act:
+			changed = true
+			break
+	_check(changed and game.human_aim.is_equal_approx(left_at), "jogada nova: mira continua onde você deixou")
+	game.human_press(human)
+	_check(game.human_aim.is_equal_approx(left_at), "apertar o botão não reposiciona a mira")
+	game.human_release(human)
+	_check(not game.human_aim_view().is_empty(), "mira continua visível depois do toque")
+	var rec: Vector3 = game._aims[Game.Act.RECEIVE]
+	_check(rec.z * s > 0.0, "mira da recepção é separada e continua no seu lado")
 	_free_main(main)
 
 

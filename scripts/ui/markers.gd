@@ -74,7 +74,7 @@ func refresh() -> void:
 			else:
 				_approach_mat.albedo_color = Color(1.0, 1.0, 1.0, 0.9)
 
-	# mira (enquanto você segura o botão)
+	# mira (sempre visível; fica onde você deixou por último)
 	var aim := game.human_aim_view()
 	_reticle.visible = not aim.is_empty()
 	var snapped_name := ""
