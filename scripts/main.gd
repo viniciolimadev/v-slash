@@ -13,6 +13,7 @@ var controls: TouchControls
 var hud: Hud
 var markers: Markers
 var cam: Camera3D
+var stats := MatchStats.new()
 
 
 func _ready() -> void:
@@ -83,6 +84,7 @@ func _build_match() -> void:
 	if autoplay:
 		bots.append(BotBrain.new(human, game, 1))
 	game.setup(ball, players, bots)
+	stats.attach(game)
 	markers = Markers.new()
 	add_child(markers)
 	markers.setup(game, human)
@@ -144,6 +146,7 @@ func _on_aim_dragged(rel: Vector2) -> void:
 
 func _on_reset() -> void:
 	game.reset_match()
+	stats.reset()
 	hud.banner("", Color.WHITE, 0.0)
 
 

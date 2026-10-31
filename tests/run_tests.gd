@@ -36,6 +36,10 @@ func _run() -> void:
 	_test_match_rules()
 	print("== partida completa bot x bot ==")
 	_test_match_flow()
+	print("== estatísticas da partida ==")
+	_test_stats()
+	print("== save ==")
+	_test_save()
 	print("falhas: %d" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -447,6 +451,90 @@ func _test_match_flow() -> void:
 	_check(int(seen["touch_after"]) == 0 and game.state == Game.State.MATCH_OVER,
 			"depois do fim ninguém saca nem toca")
 	_free_main(main)
+
+
+func _test_stats() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var foe: Player = main.get("foe")
+	var st: MatchStats = main.get("stats")
+	game.touch_made.emit(human, "SAQUE", 0.85)
+	game.touch_made.emit(foe, "PERFEITO!", 1.0)
+	game.touch_made.emit(human, "PERFEITO!", 1.0)
+	game.touch_made.emit(human, "BOM", 0.7)
+	game.touch_made.emit(human, "TARDE", 0.35)
+	game.whiffed.emit(human, "CEDO")
+	game.whiffed.emit(human, "LONGE")
+	game.whiffed.emit(foe, "SEM BOLA")
+	game.rally_touches = 6
+	game.point_scored.emit(1, "Bola no chão")
+	game.point_scored.emit(0, "Fora")
+	game.point_scored.emit(0, "Fora")
+	_check(st.touches == [3, 1], "saque não conta como toque (%s)" % [st.touches])
+	_check(st.perfect == [1, 1] and st.good == [1, 0], "perfeitos e bons por time")
+	_check(st.timing_errors == [2, 0] and st.far == [1, 0], "erros de tempo e LONGE contados")
+	_check(st.points(0) == 2 and int(st.points_by_reason[0]["Fora"]) == 2 and st.points(1) == 1,
+			"pontos por motivo")
+	_check(st.best_rally == 6 and is_equal_approx(st.perfect_rate(0), 1.0 / 3.0), "maior rally e % de perfeitos")
+	st.reset()
+	_check(st.touches == [0, 0] and st.points(0) == 0, "Reiniciar zera as estatísticas")
+	_free_main(main)
+
+
+func _test_save() -> void:
+	var path := "user://test_save.cfg"
+	DirAccess.remove_absolute(path)
+	var s := SaveData.new(path)
+	s.load_file()
+	_check(s.unlocked_level == 0 and not s.tutorial_done and s.aim_sens == 1.0 and s.vibration,
+			"sem arquivo: valores padrão")
+	s.unlocked_level = 1
+	s.tutorial_done = true
+	s.best_rally = 12
+	s.wins = [3, 1, 0]
+	s.losses = [0, 2, 0]
+	s.aim_sens = 1.4
+	s.left_handed = true
+	s.vibration = false
+	_check(s.save_file() == OK and not FileAccess.file_exists(path + ".tmp"), "grava sem deixar arquivo temporário")
+	var r := SaveData.new(path)
+	r.load_file()
+	_check(r.unlocked_level == 1 and r.tutorial_done and r.best_rally == 12 and r.wins == [3, 1, 0]
+			and r.losses == [0, 2, 0] and is_equal_approx(r.aim_sens, 1.4) and r.left_handed and not r.vibration,
+			"ida e volta de todos os campos")
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string("isto não é um ConfigFile [[[")
+	f.close()
+	r = SaveData.new(path)
+	r.load_file()
+	_check(r.unlocked_level == 0 and r.wins == [0, 0, 0], "arquivo ilegível: valores padrão")
+	var cfg := ConfigFile.new()
+	cfg.set_value("progress", "unlocked_level", 9)
+	cfg.set_value("options", "aim_sens", 50.0)
+	cfg.set_value("records", "wins", ["x", -4])
+	cfg.save(path)
+	r.load_file()
+	_check(r.unlocked_level == 2 and r.aim_sens == SaveData.AIM_SENS_MAX and r.wins == [0, 0, 0],
+			"valores fora do limite são cortados")
+	var st := MatchStats.new()
+	st.best_rally = 9
+	var fresh := SaveData.new(path)
+	var win := MatchResult.new(0, 0, [Vector2i(15, 3), Vector2i(15, 4)], st)
+	fresh.record_result(win)
+	_check(fresh.unlocked_level == 1 and win.unlocked == 1 and fresh.wins[0] == 1 and fresh.best_rally == 9,
+			"vencer o Fácil libera o Médio")
+	var again := MatchResult.new(0, 0, [], st)
+	fresh.record_result(again)
+	_check(fresh.unlocked_level == 1 and again.unlocked == -1, "vencer de novo não libera nada novo")
+	var loss := MatchResult.new(1, 1, [], st)
+	fresh.record_result(loss)
+	_check(fresh.losses[1] == 1 and fresh.unlocked_level == 1, "derrota conta e não libera")
+	fresh.unlocked_level = 2
+	var top := MatchResult.new(0, 2, [], st)
+	fresh.record_result(top)
+	_check(fresh.unlocked_level == 2 and top.unlocked == -1, "vencer o Difícil mantém o nível 2")
+	DirAccess.remove_absolute(path)
 
 
 func _make_main(autoplay: bool) -> Node:
