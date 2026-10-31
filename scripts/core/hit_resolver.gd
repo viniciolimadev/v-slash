@@ -109,6 +109,30 @@ func _cancel_drift(shot: Shot) -> void:
 		shot.wobble_phase += PI
 
 
+## Saída da bola que bateu nas mãos do bloqueio `bk`, pela qualidade do timing:
+## PERFEITO = para baixo do lado do atacante; BOM = amortece e sobe do lado do bloqueador;
+## ruim = desvia para fora, pela lateral mais perto.
+func block_exit(from: Vector3, bk: Block, q: float) -> Shot:
+	var s := bk.side
+	var w := Tuning.COURT_HALF_W - 0.5
+	var shot := Shot.new()
+	shot.from = from
+	shot.grav = Tuning.GRAVITY
+	shot.kind = Game.Act.BLOCK
+	if q >= 1.0:
+		var dist := rng.randf_range(Tuning.BLOCK_DOWN_DIST.x, Tuning.BLOCK_DOWN_DIST.y)
+		shot.target = Vector3(clampf(from.x + rng.randf_range(-1.0, 1.0), -w, w), Tuning.BALL_RADIUS, -s * dist)
+		shot.vel = BallSim.launch_velocity(from, shot.target, Tuning.BLOCK_T_DOWN)
+	elif q >= Tuning.ASSIST_KEEP_IN_Q:
+		shot.target = Vector3(clampf(from.x, -w, w), Tuning.BALL_RADIUS, s * Tuning.BLOCK_SOFT_DIST)
+		shot.vel = BallSim.clear_net_velocity(from, shot.target, Tuning.BLOCK_T_SOFT)
+	else:
+		var out := 1.0 if from.x >= 0.0 else -1.0
+		shot.target = Vector3(out * (Tuning.COURT_HALF_W + 1.5), Tuning.BALL_RADIUS, s * rng.randf_range(1.0, 4.0))
+		shot.vel = BallSim.clear_net_velocity(from, shot.target, Tuning.BLOCK_T_DEFLECT)
+	return shot
+
+
 ## Erro de mira pela qualidade: até base·(1 − q) metros, distribuído no disco.
 func scatter(target: Vector3, kind: int, q: float) -> Vector3:
 	var base := Tuning.SCATTER_RECEIVE

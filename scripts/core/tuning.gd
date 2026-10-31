@@ -68,6 +68,18 @@ const FLOAT_FREQ := 4.5                      # rad/s da oscilação (~1 balanço
 const FLOAT_REVEAL := 0.45                   # s antes do contato em que o anel mostra a posição certa
 const FLOAT_SLIDE := 0.15                    # s que o anel leva deslizando até a posição certa
 
+# --- Bloqueio ---
+const BLOCK_ZONE := 1.2            # m da rede: mais perto que isso, o botão vira BLOQUEAR
+const BLOCK_DEPTH := 0.25          # m que as mãos passam da rede (do lado do atacante)
+const BLOCK_HALF_W := 0.45         # m: meia largura das mãos
+const BLOCK_REACH := 0.55          # m: topo das mãos acima da fita no pico do pulo
+const BLOCK_RECOVER := 0.35        # s sem poder tocar depois de cair do bloqueio
+const BLOCK_T_DOWN := 0.5          # s de voo do bloqueio PERFEITO (bola para baixo do lado do atacante)
+const BLOCK_DOWN_DIST := Vector2(1.5, 3.0)   # m da rede onde cai o bloqueio PERFEITO
+const BLOCK_T_SOFT := 1.5          # s de voo do bloqueio BOM (amortece e sobe do seu lado)
+const BLOCK_SOFT_DIST := 3.0       # m da rede onde cairia o bloqueio BOM
+const BLOCK_T_DEFLECT := 0.9       # s de voo do bloqueio ruim (desvia para fora)
+
 # --- Jogador ---
 const MOVE_SPEED := 6.2
 const ACCEL := 45.0

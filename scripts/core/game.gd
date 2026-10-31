@@ -9,12 +9,14 @@ signal whiffed(player: Player, why: String)
 signal set_over(team: int, set_index: int, final: Vector2i)
 signal match_over(team: int)
 signal served(player: Player, serve_kind: int, grade: String)
+## Mecânica da Fase 2 usada (pulo de bloqueio, largada, peixinho): estatística e testes.
+signal action_used(player: Player, act: int)
 
 ## SERVE_TOSS: bola lançada no saque flutuante/viagem, esperando o toque (Fase 2).
 enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER, SERVE_TOSS }
-enum Act { NONE, SERVE, RECEIVE, SET_BALL, ATTACK, FREEBALL }
+enum Act { NONE, SERVE, RECEIVE, SET_BALL, ATTACK, FREEBALL, BLOCK }
 
-const ACT_LABELS := ["", "SACAR", "RECEBER", "LEVANTAR", "ATACAR", "PASSAR"]
+const ACT_LABELS := ["", "SACAR", "RECEBER", "LEVANTAR", "ATACAR", "PASSAR", "BLOQUEAR"]
 
 var state: int = State.SERVE_WAIT
 var time := 0.0
@@ -32,6 +34,11 @@ var best_rally := 0
 var rally_over := false
 var plan: ContactPlan = null        # ver _make_plan()
 var plan_id := 0
+## Bloqueio possível para o time que defende um ataque (ver _update_block_plan()).
+## t = quando a bola cruza a rede; pos = ponto na rede do seu lado.
+var block_plan: ContactPlan = null
+var blocks: Array[Block] = []       # mãos no ar agora
+var last_kind: int = Act.NONE       # tipo do último toque (o ataque abre o bloqueio)
 var land_point := Vector3.ZERO      # onde a bola cai se ninguém tocar
 var land_in := true
 var land_display := Vector3.ZERO    # ponto de queda "sem efeito" (flutuante); ver land_view()
@@ -93,6 +100,7 @@ func tick(dt: float) -> void:
 		p.look_target = ball.position
 		p.step(dt)
 	_auto_jumps()
+	_update_block_plan()
 	for e in ball.step(dt):
 		_on_ball_event(e)
 	_run_pending()
@@ -127,9 +135,13 @@ func current_act(p: Player) -> int:
 		if p == server and ball.mode == Ball.Mode.HELD:
 			return Act.SERVE
 		return Act.NONE
-	if not _in_rally() or plan == null or plan.player != p:
+	if not _in_rally():
 		return Act.NONE
-	return plan.act
+	if plan != null and plan.player == p:
+		return plan.act
+	if block_plan != null and block_plan.player == p:
+		return Act.BLOCK
+	return Act.NONE
 
 
 func action_label(p: Player) -> String:
@@ -138,9 +150,17 @@ func action_label(p: Player) -> String:
 
 ## Está na hora de soltar? (o botão acende)
 func is_hot(p: Player) -> bool:
-	if plan == null or current_act(p) == Act.NONE:
+	var act := current_act(p)
+	if act == Act.BLOCK:
+		return absf(time - block_release_t()) <= Tuning.GOOD
+	if act == Act.NONE or plan == null:
 		return false
 	return absf(time - plan.t) <= Tuning.GOOD * window_scale()
+
+
+## Hora ideal de soltar o BLOQUEAR: o pico do pulo cai quando a bola cruza a rede.
+func block_release_t() -> float:
+	return block_plan.t - Tuning.JUMP_TIME_UP if block_plan != null else INF
 
 
 ## Multiplicador da janela de timing do plano atual (a viagem tem janela menor).
@@ -306,6 +326,9 @@ func attempt_hit(p: Player, aim: Vector3, power_cap: float = 1.0) -> void:
 	if not _in_rally() or rally_over:
 		return
 	if plan == null or plan.player != p:
+		if block_plan != null and block_plan.player == p:
+			_start_block(p)
+			return
 		_whiff(p, "SEM BOLA")
 		return
 	for item in _pending:
@@ -365,13 +388,14 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 		_serve(p, aim, q, grade)
 		return
 	var shot := resolver.resolve(self, p, plan.act, aim, q, cap)
-	ball.launch(shot.from, shot.vel, shot.grav)
+	_launch(shot)
 	p.lunge(shot.from)
 	if p.team != last_team:
 		touches = 1
 	else:
 		touches += 1
 	last_team = p.team
+	last_kind = shot.kind
 	rally_touches += 1
 	p.swing_cd = 0.25
 	p.swing(shot.kind)
@@ -407,11 +431,11 @@ func _serve(p: Player, aim: Vector3, q: float, grade: String = "SAQUE") -> void:
 	if ball.mode == Ball.Mode.HELD:
 		from = p.position + Vector3(0.0, float(Tuning.SERVE_CONTACT_H[kind]), -0.3 * s)
 	var shot := resolver.serve(self, p, kind, from, aim, q)
-	ball.launch(shot.from, shot.vel, shot.grav)
-	ball.sim.set_wobble(shot.wobble_amp, Tuning.FLOAT_FREQ, shot.wobble_phase)
+	_launch(shot)
 	p.serving = false
 	state = State.PLAY
 	last_team = p.team
+	last_kind = Act.SERVE
 	touches = 3          # quem sacou não pode tocar de novo antes da bola passar
 	rally_touches = 1
 	p.swing(Act.SERVE)
@@ -437,6 +461,94 @@ func feed_ball(to: Vector3, flight_time: float) -> void:
 	var from := Vector3(0.0, 2.6, -3.0)
 	var at := Vector3(to.x, Tuning.BALL_RADIUS, to.z)
 	ball.launch(from, BallSim.clear_net_velocity(from, at, flight_time))
+	_make_plan()
+
+
+## Lança a bola real com o relógio e as mãos de bloqueio no ar (o preditor herda os dois).
+func _launch(shot: HitResolver.Shot) -> void:
+	ball.launch(shot.from, shot.vel, shot.grav)
+	ball.sim.set_wobble(shot.wobble_amp, Tuning.FLOAT_FREQ, shot.wobble_phase)
+	ball.sim.clock = time
+	ball.sim.blocks = blocks.duplicate()
+
+
+# ---------------------------------------------------------------- bloqueio
+
+## Quem pode bloquear o ataque que vem: o defensor mais perto da rede, se estiver na zona.
+## Antes do ataque, x e tempo estimados pelo plano do atacante; depois, exatos pelo preditor.
+func _update_block_plan() -> void:
+	block_plan = null
+	var now := time
+	blocks = blocks.filter(func(bk: Block) -> bool: return bk.t_end() > now)
+	if state != State.PLAY or rally_over:
+		return
+	var atk_team := -1
+	var x := 0.0
+	var t_cross := 0.0
+	if plan != null and plan.act == Act.ATTACK:
+		atk_team = plan.team
+		x = plan.pos.x
+		t_cross = plan.t + absf(plan.pos.z) / Tuning.ATTACK_SPEED_MAX
+	elif last_kind == Act.ATTACK and ball.mode == Ball.Mode.FLYING and not ball.sim.stopped \
+			and side_of_point(ball.position) == side_of_team(last_team) and absf(ball.sim.vel.z) > 1e-6:
+		atk_team = last_team
+		var tc := -ball.sim.pos.z / ball.sim.vel.z
+		x = ball.sim.pos_after(tc).x
+		t_cross = time + tc
+	else:
+		return
+	var s := side_of_team(1 - atk_team)
+	var best: Player = null
+	for p in players:
+		if p.team != atk_team and p.is_grounded() and absf(p.position.z) <= Tuning.BLOCK_ZONE:
+			if best == null or absf(p.position.z) < absf(best.position.z):
+				best = p
+	if best == null:
+		return
+	block_plan = ContactPlan.new(best.team, 0, Act.BLOCK, t_cross, Vector3(x, 0.0, s * 0.5), best)
+
+
+## Soltar com BLOQUEAR: pula no lugar; as mãos valem enquanto passam da fita.
+func _start_block(p: Player) -> void:
+	if not p.is_grounded():
+		return
+	p.start_jump(p.position)
+	var bk := Block.new(p, time, Tuning.JUMP_HEIGHT)
+	blocks.append(bk)
+	p.swing_cd = Tuning.JUMP_TIME_UP * 2.0 + Tuning.BLOCK_RECOVER
+	p.swing(Act.BLOCK)
+	action_used.emit(p, Act.BLOCK)
+	if ball.mode == Ball.Mode.FLYING:
+		ball.sim.blocks.append(bk)
+		# o preditor já sabe do bloqueio: se esta bola vai bater nas mãos, o plano muda
+		if bool(ball.sim.predict()["blocked"]):
+			_make_plan()
+
+
+## Bola bateu nas mãos: a saída vem do timing do pulo (erro = pico − contato; pulou cedo = CEDO).
+## O bloqueio não conta como toque: o time do bloqueador ainda tem os 3.
+func _on_block(e: Dictionary) -> void:
+	var bk: Block = e["block"]
+	var from: Vector3 = e["pos"]
+	blocks.erase(bk)
+	var err := bk.t_peak() - ball.sim.clock
+	var a := absf(err)
+	var q := 1.0
+	var grade := "PERFEITO!"
+	if a > Tuning.PERFECT:
+		if a <= Tuning.GOOD:
+			q = 0.7
+			grade = "BOM"
+		else:
+			q = 0.35
+			grade = "CEDO" if err < 0.0 else "TARDE"
+	var shot := resolver.block_exit(from, bk, q)
+	_launch(shot)
+	last_team = bk.team
+	last_kind = Act.BLOCK
+	touches = 0
+	rally_touches += 1
+	touch_made.emit(bk.player, grade, q)
 	_make_plan()
 
 
@@ -583,7 +695,9 @@ func _on_ball_event(e: Dictionary) -> void:
 		return
 	if state != State.PLAY or rally_over:
 		return
-	if kind == BallSim.Ev.NET:
+	if kind == BallSim.Ev.BLOCK:
+		_on_block(e)
+	elif kind == BallSim.Ev.NET:
 		_make_plan()        # a trajetória mudou: novo anel
 	elif kind == BallSim.Ev.ANTENNA:
 		_award(1 - last_team, "Fora (antena)")
@@ -632,6 +746,9 @@ func _reset_for_serve(team: int) -> void:
 	rally_touches = 0
 	touches = 0
 	last_team = -1
+	last_kind = Act.NONE
+	blocks.clear()
+	block_plan = null
 	plan = null
 	plan_id += 1
 	_pending.clear()

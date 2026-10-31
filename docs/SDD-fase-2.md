@@ -367,3 +367,8 @@ Depois da fatia: rodar a simulação de equilíbrio (tabela do README em % de po
 | B-12 | Fora do App (F6) o seletor de saque fica à esquerda do botão do nível do bot | só na partida do App |
 | B-13 | O flutuante sorteia a fase da oscilação; se o balanço levaria a bola para fora da antena ao cruzar a rede, a fase é invertida (o erro do flutuante é de leitura, não de sorte) | deixar sair pela antena |
 | B-14 | O ponto de queda revela `FLOAT_REVEAL` s antes do **pouso**; o anel, antes do **contato** | os dois pelo contato |
+| B-15 | O plano das mãos fica **do lado do atacante** (z = −side·`BLOCK_DEPTH`: as mãos passam a fita), não do lado do bloqueador: senão o bloqueio PERFEITO, para voltar ao lado do atacante, bateria na rede | plano do lado do bloqueador e relançar a bola do outro lado |
+| B-16 | Erro do bloqueio = pico − contato: pular cedo dá **CEDO** (como soltar cedo nos outros toques) | contato − pico, como o esboço |
+| B-17 | Depois que a cortada sai, o botão de quem defende é RECEBER (o plano normal tem prioridade): o bloqueio é decidido antes do ataque, como na quadra | bloquear também depois da cortada |
+| B-18 | O pulo de bloqueio é no lugar (mãos em x fixo, sem a deriva do pulo de ataque); depois dele o jogador não toca por `2·JUMP_TIME_UP + BLOCK_RECOVER` | deriva até o x previsto |
+| B-19 | Bloqueio ruim desvia por cima da rede (sem bater nela) para fora pela lateral mais perto: ponto do atacante | desvio aleatório que às vezes fica dentro |

@@ -4,8 +4,10 @@ extends RefCounted
 ## A bola real e o preditor (anel, ponto de queda, bot) usam a MESMA função,
 ## então o marcador mostra exatamente onde a bola vai estar.
 ## Saque flutuante: oscilação lateral analítica em x (wobble), somada à parábola.
+## Bloqueio: as mãos (Block) são conhecidas desde o começo do pulo; bater nelas para a bola
+## (evento BLOCK) e o Game decide a saída, como faz com o ponto.
 
-enum Ev { CROSS, NET, ANTENNA, LAND }
+enum Ev { CROSS, NET, ANTENNA, LAND, BLOCK }
 
 var pos := Vector3.ZERO
 var vel := Vector3.ZERO
@@ -16,6 +18,9 @@ var age := 0.0                      # s desde o lançamento
 var wobble_amp := 0.0               # m (0 = bola normal)
 var wobble_freq := 0.0              # rad/s
 var wobble_phase := 0.0
+var clock := 0.0                    # relógio do Game (os bloqueios são marcados nele)
+var blocks: Array[Block] = []
+var stopped := false                # parada nas mãos do bloqueio, esperando o Game relançar
 
 
 func copy() -> BallSim:
@@ -29,6 +34,9 @@ func copy() -> BallSim:
 	b.wobble_amp = wobble_amp
 	b.wobble_freq = wobble_freq
 	b.wobble_phase = wobble_phase
+	b.clock = clock
+	b.blocks = blocks.duplicate()
+	b.stopped = stopped
 	return b
 
 
@@ -89,12 +97,13 @@ static func clear_net_velocity(from: Vector3, to: Vector3, t0: float, grav: floa
 	return v
 
 
-## Avança dt segundos. Retorna os eventos em ordem: [{"type": Ev, "pos": Vector3}].
+## Avança dt segundos. Retorna os eventos em ordem: [{"type": Ev, "pos": Vector3}]
+## (o BLOCK traz também "block": Block).
 func advance(dt: float) -> Array:
 	var events: Array = []
 	var remaining := dt
 	var guard := 0
-	while remaining > 1e-9 and not landed and guard < 8:
+	while remaining > 1e-9 and not landed and not stopped and guard < 8:
 		guard += 1
 		var t_cross := INF
 		if absf(vel.z) > 1e-6:
@@ -104,8 +113,25 @@ func advance(dt: float) -> Array:
 		var t_floor := _time_to_height(Tuning.BALL_RADIUS)
 		if t_floor > remaining:
 			t_floor = INF
-		if t_cross == INF and t_floor == INF:
+		var t_block := INF
+		var hit_block: Block = null
+		for bk in blocks:
+			if vel.z * bk.side <= 0.0:
+				continue            # só a bola indo para o lado do bloqueador
+			var tb := (bk.plane_z() - pos.z) / vel.z
+			if tb < 0.0 or tb > remaining or tb >= t_block:
+				continue
+			if bk.catches(pos_after(tb), clock + tb):
+				t_block = tb
+				hit_block = bk
+		if t_cross == INF and t_floor == INF and t_block == INF:
 			_move(remaining)
+			break
+		if t_block <= t_cross and t_block < t_floor:
+			_move(t_block)
+			vel = Vector3.ZERO
+			stopped = true
+			events.append({"type": Ev.BLOCK, "pos": pos, "block": hit_block})
 			break
 		if t_floor <= t_cross:
 			_move(t_floor)
@@ -137,12 +163,12 @@ func predict(max_t: float = 6.0, step: float = 1.0 / 120.0) -> Dictionary:
 	var pts := PackedVector3Array([sim.pos])
 	var times := PackedFloat64Array([0.0])
 	var t := 0.0
-	while t < max_t and not sim.landed:
+	while t < max_t and not sim.landed and not sim.stopped:
 		sim.advance(step)
 		t += step
 		pts.append(sim.pos)
 		times.append(t)
-	return {"points": pts, "times": times, "land": sim.pos, "landed": sim.landed}
+	return {"points": pts, "times": times, "land": sim.pos, "landed": sim.landed, "blocked": sim.stopped}
 
 
 ## Primeiro instante (relativo) em que a bola DESCE pela altura h no lado `side` (+1/-1).
@@ -159,13 +185,20 @@ static func find_descent(pred: Dictionary, h: float, side: float) -> Dictionary:
 	return {}
 
 
-func _move(t: float) -> void:
-	pos += vel * t + Vector3(0.0, -0.5 * g * t * t, 0.0)
+## Posição daqui a t segundos, sem mexer na bola (sem rede nem chão).
+func pos_after(t: float) -> Vector3:
+	var p := pos + (vel * t + Vector3(0.0, -0.5 * g * t * t, 0.0))
 	if wobble_amp != 0.0:
 		# termo exato (não integrado): o preditor com outro passo dá o mesmo x
-		pos.x += wobble_amp * (sin(wobble_freq * (age + t) + wobble_phase) - sin(wobble_freq * age + wobble_phase))
+		p.x += wobble_amp * (sin(wobble_freq * (age + t) + wobble_phase) - sin(wobble_freq * age + wobble_phase))
+	return p
+
+
+func _move(t: float) -> void:
+	pos = pos_after(t)
 	vel.y -= g * t
 	age += t
+	clock += t
 
 
 ## Tempo até o centro da bola descer até a altura h (INF se nunca).

@@ -38,6 +38,8 @@ func _run() -> void:
 	_test_serve_types()
 	print("== saque flutuante ==")
 	_test_float_physics()
+	print("== bloqueio ==")
+	_test_block()
 	print("== regras da partida (sets) ==")
 	_test_match_rules()
 	print("== partida completa bot x bot ==")
@@ -200,7 +202,7 @@ func _test_scripted_human() -> void:
 	var serve_timer := 0.0
 	for _i in int(600.0 / DT):
 		human.move_input = Vector2.ZERO
-		var act := game.current_act(human)
+		var act := _phase1_act(game, human)
 		if act == Game.Act.SERVE:
 			serve_timer += DT
 			if not pressed and serve_timer > 0.5:
@@ -290,7 +292,7 @@ func _test_aim() -> void:
 	var z: float = (view["pos"] as Vector3).z if not view.is_empty() else 0.0
 	_check(z * -s >= Tuning.AIM_DEEP - 0.01, "mira começa no fundo da quadra adversária (z=%.1f)" % z)
 	# arrasta e solta: a mira fica onde estava, também nas jogadas seguintes
-	var act := game.current_act(human)
+	var act := _phase1_act(game, human)
 	game.human_press(human)
 	game.human_drag(human, Vector2(-120.0, 60.0))
 	var left_at: Vector3 = game.human_aim
@@ -616,6 +618,101 @@ func _test_float_physics() -> void:
 			_check(seen == BallSim.Ev.ANTENNA, "com oscilação a mesma bola sai pela antena")
 
 
+## Bola no ponto de ataque do bot (2,5 m da rede), plano ATTACK dele, você em `human_at`.
+## Sem cérebro de bot: o teste decide tudo.
+func _attack_setup(game: Game, foe: Player, human: Player, human_at: Vector3) -> void:
+	game.bots.clear()
+	game.state = Game.State.PLAY
+	game.rally_over = false
+	human.reset_state()
+	human.position = human_at
+	var at := Vector3(0.0, Tuning.H_ATTACK, -2.5)
+	foe.reset_state()
+	foe.position = Vector3(at.x, 0.0, at.z)
+	game.ball.launch(at, Vector3.ZERO)
+	game.last_team = foe.team
+	game.touches = 2
+	game.plan = ContactPlan.new(foe.team, 3, Game.Act.ATTACK, game.time, at, foe)
+	game._update_block_plan()
+
+
+## Instante (relógio do Game) em que a bola chega ao plano das mãos de quem defende o lado +z.
+func _time_at_block_plane(game: Game) -> float:
+	var pred := game.ball.sim.predict()
+	var pts: PackedVector3Array = pred["points"]
+	var times: PackedFloat64Array = pred["times"]
+	for i in range(1, pts.size()):
+		var z0 := pts[i - 1].z + Tuning.BLOCK_DEPTH
+		var z1 := pts[i].z + Tuning.BLOCK_DEPTH
+		if z0 < 0.0 and z1 >= 0.0:
+			return game.time + lerpf(times[i - 1], times[i], -z0 / (z1 - z0))
+	return INF
+
+
+func _test_block() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var foe: Player = main.get("foe")
+	_attack_setup(game, foe, human, Vector3(0.0, 0.0, 3.0))
+	_check(game.current_act(human) == Game.Act.NONE, "longe da rede: sem bloqueio")
+	_attack_setup(game, foe, human, Vector3(0.0, 0.0, 0.8))
+	_check(game.current_act(human) == Game.Act.BLOCK and game.action_label(human) == "BLOQUEAR",
+			"perto da rede com o ataque vindo: o botão vira BLOQUEAR")
+
+	# pula antes do ataque: o preditor já sabe que a cortada para nas mãos
+	game.human_press(human)
+	game.human_release(human)
+	_check(not human.is_grounded() and game.blocks.size() == 1, "soltar BLOQUEAR pula")
+	for _i in int(0.25 / DT):
+		game.tick(DT)
+	game._execute(foe, Vector3(0.0, 0.0, 5.0), 0.0, 1.0)
+	_check(bool(game.ball.sim.predict()["blocked"]) and game.plan == null,
+			"cortada no bloqueio: o preditor mostra a bola parando nas mãos")
+	var hit := [""]
+	game.touch_made.connect(func(p: Player, grade: String, _q: float) -> void:
+		if p == human:
+			hit[0] = grade)
+	for _i in int(0.5 / DT):
+		game.tick(DT)
+	_check(hit[0] != "" and game.last_team == human.team, "a bola bate nas mãos (%s)" % hit[0])
+
+	# graus pelo erro do pico (bloqueio colocado direto, sem esperar o pulo)
+	var expect := {0.0: "PERFEITO!", 0.12: "BOM", -0.22: "CEDO"}
+	for e: float in expect:
+		_attack_setup(game, foe, human, Vector3(0.0, 0.0, 0.6))
+		game._execute(foe, Vector3(0.0, 0.0, 5.0), 0.0, 1.0)
+		var t_hit := _time_at_block_plane(game)
+		var bk := Block.new(human, t_hit + e - Tuning.JUMP_TIME_UP, Tuning.JUMP_HEIGHT)
+		game.blocks.append(bk)
+		game.ball.sim.blocks.append(bk)
+		hit[0] = ""
+		var landed_z := 0.0
+		for _i in int(0.3 / DT):
+			game.tick(DT)
+			if hit[0] != "":
+				break
+		var target := game.ball.sim.copy().predict()["land"] as Vector3
+		landed_z = target.z
+		var ok: bool = hit[0] == expect[e] and game.last_team == human.team and game.touches == 0
+		if e == 0.0:
+			ok = ok and landed_z < 0.0
+		elif e == 0.12:
+			ok = ok and landed_z > 0.0 and game.plan != null and game.plan.player == human \
+					and game.plan.act == Game.Act.RECEIVE and game.plan.n == 1
+		else:
+			ok = ok and absf(target.x) > Tuning.COURT_HALF_W
+		_check(ok, "pico %+.2f s: %s, bloqueio não conta toque (%s, cai em %s)" % [e, expect[e], hit[0], target])
+
+	# cortada mirada longe das mãos passa
+	_attack_setup(game, foe, human, Vector3(-1.5, 0.0, 0.6))
+	var away := Block.new(human, game.time - Tuning.JUMP_TIME_UP + 0.1, Tuning.JUMP_HEIGHT)
+	game.blocks.append(away)
+	game._execute(foe, Vector3(2.5, 0.0, 5.0), 0.0, 1.0)
+	_check(not bool(game.ball.sim.predict()["blocked"]), "cortada na diagonal, longe das mãos, passa")
+	_free_main(main)
+
+
 ## Joga pontos seguidos de um time.
 func _points(r: MatchRules, team: int, n: int) -> Dictionary:
 	var last := {}
@@ -814,7 +911,7 @@ func _test_left_handed() -> void:
 ## mirando em `serve_at`. Devolve o novo estado de "apertado".
 func _script_human(game: Game, human: Player, pressed: bool, serve: bool, serve_at: Vector3) -> bool:
 	human.move_input = Vector2.ZERO
-	var act := game.current_act(human)
+	var act := _phase1_act(game, human)
 	if act == Game.Act.SERVE:
 		if not serve:
 			return pressed
@@ -840,6 +937,12 @@ func _script_human(game: Game, human: Player, pressed: bool, serve: bool, serve_
 	if pressed:
 		game.human_release(human)
 	return false
+
+
+## Os roteiros de humano da Fase 1 não bloqueiam: os números das simulações continuam comparáveis.
+func _phase1_act(game: Game, human: Player) -> int:
+	var act := game.current_act(human)
+	return Game.Act.NONE if act == Game.Act.BLOCK else act
 
 
 func _zone_pos(game: Game, human: Player, zone: String) -> Vector3:
@@ -954,7 +1057,7 @@ func _test_match_duration() -> void:
 		var t0 := game.time
 		while game.state != Game.State.MATCH_OVER and game.time - t0 < 3600.0:
 			human.move_input = Vector2.ZERO
-			var act := game.current_act(human)
+			var act := _phase1_act(game, human)
 			if act == Game.Act.SERVE:
 				st["serve_t"] = float(st["serve_t"]) + DT
 				if not st["pressed"] and float(st["serve_t"]) > 0.8:
