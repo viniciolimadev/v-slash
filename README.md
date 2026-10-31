@@ -29,7 +29,7 @@ Timing ruim = bola menos precisa (e cortada mais fraca). Longe do anel = "LONGE"
 
 **Meta da Fase 0:** rally de **5+ toques** e vontade de jogar mais uma. O HUD mostra Rally e Recorde.
 
-## Ajustar o feel → `scripts/tuning.gd`
+## Ajustar o feel → `scripts/core/tuning.gd`
 
 | Se… | Mexa em |
 |---|---|
@@ -62,19 +62,32 @@ godot --headless --script res://tests/run_tests.gd     # física, câmera, bot x
 godot -- --autoplay                                    # demo bot x bot
 ```
 
-## Arquivos
+## Estrutura
+
+```
+project.godot          config do Godot (cena principal: scenes/main.tscn)
+scenes/main.tscn       cena raiz
+scripts/
+  main.gd              monta a cena e liga tudo
+  core/                regras e física (sem nós visuais)
+  ai/                  bot
+  entities/            objetos 3D do jogo
+  ui/                  HUD, controles e marcadores
+tests/run_tests.gd     testes headless
+```
 
 | Arquivo | Faz |
 |---|---|
-| `scripts/ball_sim.gd` | física exata da bola (parábola, rede, chão) + preditor |
-| `scripts/game.gd` | regras, plano de contato (quem/onde/quando), toque, pontos |
-| `scripts/bot_brain.gd` | IA (usa o mesmo preditor) |
-| `scripts/player.gd` | movimento, pulo automático, animação |
-| `scripts/markers.gd` | sombra, ponto de queda, anel, mira |
-| `scripts/touch_controls.gd` | joystick flutuante + botão de ação |
-| `scripts/hud.gd` | placar, rally, feedback |
-| `scripts/court.gd` | quadra, rede, antenas |
-| `scripts/tuning.gd` | todos os números |
+| `scripts/core/ball_sim.gd` | física exata da bola (parábola, rede, chão) + preditor |
+| `scripts/core/game.gd` | regras, plano de contato (quem/onde/quando), toque, pontos |
+| `scripts/core/tuning.gd` | todos os números |
+| `scripts/ai/bot_brain.gd` | IA (usa o mesmo preditor) |
+| `scripts/entities/ball.gd` | visual da bola |
+| `scripts/entities/player.gd` | movimento, pulo automático, animação |
+| `scripts/entities/court.gd` | quadra, rede, antenas |
+| `scripts/ui/markers.gd` | sombra, ponto de queda, anel, mira |
+| `scripts/ui/touch_controls.gd` | joystick flutuante + botão de ação |
+| `scripts/ui/hud.gd` | placar, rally, feedback |
 
 ## Fora da Fase 0 (de propósito)
 
