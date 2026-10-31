@@ -37,6 +37,8 @@ Timing ruim = bola menos precisa (e cortada mais fraca). Longe do anel = "LONGE"
 | não chega na bola | `REACH`, `MOVE_SPEED` |
 | cortada impossível de defender | `ATTACK_SPEED_MAX`, `SPIKE_GRAVITY` |
 | mira sensível demais | `AIM_SENS` |
+| mira gruda demais / de menos | `AIM_MAGNET_RADIUS`, `RECEIVE_MAGNET_RADIUS`, `ATTACK_ZONES` |
+| bola boa ainda sai / nunca sai | `AIM_MARGIN`, `ASSIST_KEEP_IN_Q` |
 | jogo lento/rápido | `GRAVITY`, `T_RECEIVE`, `T_SET_HIGH` |
 | bot forte/fraco | `BOT_SPEED`, `BOT_REACTION`, `BOT_POWER` |
 

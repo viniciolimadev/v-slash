@@ -61,6 +61,20 @@ const MAGNET_SPEED := 2.2
 const AIM_SENS := 0.028            # metros por pixel arrastado
 const AIM_DEEP := 5.5              # posição inicial da mira de saque/ataque: fundo da quadra adversária (m da rede)
 const SET_MAGNET_RADIUS := 1.3
+# assistência de mira (só para o humano)
+const AIM_MARGIN := 0.5            # a mira não sai da quadra: fica 0,5 m para dentro das linhas
+const AIM_MAGNET_RADIUS := 1.2     # saque/ataque: a mira gruda na zona mais próxima
+const RECEIVE_MAGNET_RADIUS := 1.8 # recepção: gruda no levantador
+const ASSIST_KEEP_IN_Q := 0.7      # toque BOM ou melhor: a bola não sai da quadra
+# zonas de saque/ataque na quadra adversária: (x, distância da rede); x > 0 = sua direita
+const ATTACK_ZONES := [
+	["FUNDO", Vector2(0.0, 5.8)],
+	["FUNDO ESQ", Vector2(-2.6, 5.8)],
+	["FUNDO DIR", Vector2(2.6, 5.8)],
+	["MEIO", Vector2(0.0, 3.4)],
+	["CURTA ESQ", Vector2(-2.2, 1.8)],
+	["CURTA DIR", Vector2(2.2, 1.8)],
+]
 const SETTER_SPOT := Vector2(0.8, 1.6)   # (x, z) do levantamento do time 0; o bot usa o espelho
 
 # --- Bot: índice 0 = fácil, 1 = médio, 2 = difícil ---

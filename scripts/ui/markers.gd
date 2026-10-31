@@ -14,6 +14,7 @@ var _approach_mat: StandardMaterial3D
 var _reticle: MeshInstance3D
 var _reticle_label: Label3D
 var _magnet_labels: Array[Label3D] = []
+var _magnet_dots: Array[MeshInstance3D] = []
 
 
 func setup(g: Game, h: Player) -> void:
@@ -26,14 +27,19 @@ func setup(g: Game, h: Player) -> void:
 	_approach_mat = _flat(Color(1.0, 1.0, 1.0, 0.9))
 	_approach = _torus(0.4, 0.47, _approach_mat)
 	_reticle = _torus(0.2, 0.28, _flat(Color(1.0, 0.85, 0.2)))
-	_reticle_label = _label(56)
+	_reticle_label = _label(64)
+	_reticle_label.pixel_size = 0.012
+	_reticle_label.modulate = Color(1.0, 0.9, 0.3)
 	_reticle_label.position = Vector3(0.0, 0.7, 0.0)
 	_reticle.add_child(_reticle_label)
-	for _i in 4:
-		var l := _label(36)
-		l.modulate = Color(1.0, 1.0, 1.0, 0.7)
+	for _i in 6:
+		var l := _label(48)
+		l.pixel_size = 0.01
+		l.modulate = Color(1.0, 1.0, 1.0, 0.85)
 		add_child(l)
 		_magnet_labels.append(l)
+		# ponto no chão de cada zona de mira (o escolhido fica amarelo)
+		_magnet_dots.append(_disk(0.3, _flat(Color(1.0, 1.0, 1.0, 0.45))))
 	refresh()
 
 
@@ -84,18 +90,27 @@ func refresh() -> void:
 		snapped_name = str(aim["name"])
 		_reticle_label.text = snapped_name
 
-	# alvos do levantamento
-	var show_magnets := not aim.is_empty() and game.current_act(human) == Game.Act.SET_BALL
-	var mags := game.set_magnets(human.team) if show_magnets else []
+	# alvos da jogada (enquanto você segura o botão)
+	var show_magnets := not aim.is_empty() and game.human_aiming
+	var mags := game.aim_magnets(human, game.current_act(human)) if show_magnets else []
+	# nomes só no levantamento (no resto, o nome da zona escolhida aparece na mira)
+	var named := game.current_act(human) == Game.Act.SET_BALL
 	for i in _magnet_labels.size():
 		var l := _magnet_labels[i]
+		var dot := _magnet_dots[i]
 		l.visible = false
+		dot.visible = false
 		if i < mags.size():
 			var m: Dictionary = mags[i]
 			var mp: Vector3 = m["pos"]
-			l.visible = str(m["name"]) != snapped_name
-			l.position = Vector3(mp.x, 0.35, mp.z)
+			var picked := str(m["name"]) == snapped_name
+			l.visible = named and not picked
+			l.position = Vector3(mp.x, 0.45, mp.z)
 			l.text = str(m["name"])
+			dot.visible = true
+			dot.position = Vector3(mp.x, 0.03, mp.z)
+			(dot.material_override as StandardMaterial3D).albedo_color = \
+					Color(1.0, 0.85, 0.2, 0.9) if picked else Color(1.0, 1.0, 1.0, 0.45)
 
 
 func _act_color(act: int) -> Color:
