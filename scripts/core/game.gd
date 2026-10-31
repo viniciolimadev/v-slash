@@ -34,14 +34,9 @@ var bot_level := 0                  # começa no Fácil: a meta da Fase 0 é sen
 var rng := RandomNumberGenerator.new()
 
 var human_aiming := false
-## Mira do humano: uma por tipo de jogada (recepção, levantamento, bola pro outro lado),
-## cada uma fica onde você deixou por último.
-var human_aim: Vector3:
-	get:
-		return _aims.get(_aim_slot(), Vector3.ZERO)
-	set(v):
-		_aims[_aim_slot()] = v
-var _aims := {}
+## Mira do humano: um ponto só, que se move apenas quando você arrasta.
+## A bola vai para onde ela está (os ímãs ajudam quando ela está perto de um alvo).
+var human_aim := Vector3.ZERO
 var _pause_t := 0.0
 var _pending: Array[Dictionary] = []
 
@@ -53,13 +48,8 @@ func setup(p_ball: Ball, p_players: Array[Player], p_bots: Array[BotBrain]) -> v
 	for p in players:
 		if p.is_human:
 			human = p
-			var s := side_of_team(p.team)
-			_aims = {
-				# saque/ataque/bola de graça começam no fundo da quadra adversária
-				Act.ATTACK: Vector3(0.0, 0.0, -s * Tuning.AIM_DEEP),
-				Act.RECEIVE: Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s),
-				Act.SET_BALL: _high_set_point(p.team),
-			}
+			# começa no fundo da quadra adversária
+			human_aim = Vector3(0.0, 0.0, -side_of_team(p.team) * Tuning.AIM_DEEP)
 	rng.randomize()
 	_reset_for_serve(0)
 
@@ -248,12 +238,7 @@ func human_release(p: Player) -> void:
 	attempt_hit(p, clamp_aim(p, human_aim))
 
 
-func _aim_slot() -> int:
-	var act := current_act(human) if human != null else Act.NONE
-	return act if act == Act.RECEIVE or act == Act.SET_BALL else Act.ATTACK
-
-
-## Mira que aparece na tela: sempre visível, onde você deixou por último ({} = sem humano).
+## Mira que aparece na tela: sempre visível, onde você deixou ({} = sem humano).
 func human_aim_view() -> Dictionary:
 	if human == null:
 		return {}
