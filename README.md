@@ -47,6 +47,18 @@ Equilíbrio dos valores atuais (simulação de 20 min por linha, "humano" com re
 | bom (reação 0,25 s, erro 50 ms) | 77% dos pontos | 52% | 20% |
 | casual (reação 0,4 s, erro 90 ms) | 54% | 33% | 13% |
 
+## Testar no celular sem instalar nada (CI)
+
+Todo push no `main` roda o workflow `.github/workflows/build.yml`:
+
+| Saída | Onde |
+|---|---|
+| Testes headless | aba **Actions** (falha se houver `SCRIPT ERROR`) |
+| Versão Web | **GitHub Pages**: `https://viniciolimadev.github.io/v-slash/` — abrir no navegador do celular |
+| APK de debug (arm64) | Actions → execução → **Artifacts** → `volei-mobile-apk` → instalar no Android |
+
+Uma vez só: Settings → Pages → Source = **GitHub Actions**.
+
 ## Rodar no Galaxy (Android)
 
 1. Editor → **Gerenciar modelos de exportação** → baixar.
