@@ -131,9 +131,9 @@ func refresh() -> void:
 
 	# alvos da jogada (enquanto você segura o botão)
 	var show_magnets := not aim.is_empty() and game.human_aiming
-	var mags := game.aim_magnets(human, game.current_act(human)) if show_magnets else []
+	var mags := game.aim_magnets(human, game.aim_act(human)) if show_magnets else []
 	# nomes só no levantamento (no resto, o nome da zona escolhida aparece na mira)
-	var named := game.current_act(human) == Game.Act.SET_BALL
+	var named := game.aim_act(human) == Game.Act.SET_BALL
 	for i in _magnet_labels.size():
 		var l := _magnet_labels[i]
 		var dot := _magnet_dots[i]
@@ -185,6 +185,8 @@ func _act_color(act: int) -> Color:
 		return Color(0.85, 0.85, 0.85)
 	if act == Game.Act.BLOCK:
 		return Color(0.75, 0.4, 1.0)
+	if act == Game.Act.DIVE:
+		return Color(1.0, 0.45, 0.1)
 	return Color(0.25, 0.85, 0.75)
 
 

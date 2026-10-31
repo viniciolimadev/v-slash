@@ -25,6 +25,7 @@ func _init(player: Player, g: Game, lvl: int) -> void:
 func set_level(lvl: int) -> void:
 	level = clampi(lvl, 0, 2)
 	p.speed = float(Tuning.BOT_SPEED[level])
+	p.can_dive = level >= 1             # o Fácil não faz peixinho
 
 
 func tick(_dt: float) -> void:

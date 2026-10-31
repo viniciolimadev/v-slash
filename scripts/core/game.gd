@@ -10,14 +10,15 @@ signal set_over(team: int, set_index: int, final: Vector2i)
 signal match_over(team: int)
 signal served(player: Player, serve_kind: int, grade: String)
 ## Mecânica da Fase 2 usada (pulo de bloqueio, largada, peixinho): estatística e testes.
-## DINK não é planejado por _make_plan: é a variação do ATTACK decidida pela mira na hora.
+## DINK e DIVE não são planejados por _make_plan: são variações decididas na hora
+## (DINK pela mira; DIVE pela distância até a bola).
 signal action_used(player: Player, act: int)
 
 ## SERVE_TOSS: bola lançada no saque flutuante/viagem, esperando o toque (Fase 2).
 enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER, SERVE_TOSS }
-enum Act { NONE, SERVE, RECEIVE, SET_BALL, ATTACK, FREEBALL, BLOCK, DINK }
+enum Act { NONE, SERVE, RECEIVE, SET_BALL, ATTACK, FREEBALL, BLOCK, DINK, DIVE }
 
-const ACT_LABELS := ["", "SACAR", "RECEBER", "LEVANTAR", "ATACAR", "PASSAR", "BLOQUEAR", "LARGAR"]
+const ACT_LABELS := ["", "SACAR", "RECEBER", "LEVANTAR", "ATACAR", "PASSAR", "BLOQUEAR", "LARGAR", "PEIXINHO"]
 
 var state: int = State.SERVE_WAIT
 var time := 0.0
@@ -142,10 +143,32 @@ func current_act(p: Player) -> int:
 		# o botão avisa a largada antes de soltar: a mira está numa zona curta
 		if plan.act == Act.ATTACK and p == human and is_dink(p, clamp_aim(p, human_aim, Act.ATTACK)):
 			return Act.DINK
+		if _will_dive(p):
+			return Act.DIVE
 		return plan.act
 	if block_plan != null and block_plan.player == p:
 		return Act.BLOCK
 	return Act.NONE
+
+
+## Ação que a mira usa (ímãs, limites): o peixinho mira como o toque do plano.
+func aim_act(p: Player) -> int:
+	var act := current_act(p)
+	return plan.act if act == Act.DIVE else act
+
+
+## No ritmo atual, o jogador não chega ao alcance normal até o contato, mas chega ao do peixinho?
+func _will_dive(p: Player) -> bool:
+	if not p.can_dive or plan.act == Act.ATTACK or plan.act == Act.SERVE:
+		return false
+	var at := plan_view_pos(plan)
+	var to := Vector2(at.x - p.position.x, at.z - p.position.z)
+	var dist := to.length()
+	if dist <= Tuning.REACH:
+		return false
+	var closing := maxf(Vector2(p.vel.x, p.vel.z).dot(to / dist), 0.0)
+	var left := dist - closing * maxf(plan.t - time, 0.0)
+	return left > Tuning.REACH and left <= Tuning.DIVE_REACH
 
 
 func action_label(p: Player) -> String:
@@ -240,7 +263,7 @@ func _magnet_radius(act: int) -> float:
 func snap_aim(p: Player, raw: Vector3, act: int = -1) -> Dictionary:
 	var out := {"pos": raw, "name": "", "quick": false}
 	if act < 0:
-		act = current_act(p)
+		act = aim_act(p)
 	var mags := aim_magnets(p, act)
 	if mags.is_empty():
 		return out
@@ -270,7 +293,7 @@ func is_dink(p: Player, aim: Vector3) -> bool:
 
 func default_aim(p: Player) -> Vector3:
 	var s := side_of_team(p.team)
-	var act := current_act(p)
+	var act := aim_act(p)
 	if act == Act.NONE:
 		return p.position
 	if act == Act.RECEIVE:
@@ -287,7 +310,7 @@ func clamp_aim(p: Player, a: Vector3, act: int = -1) -> Vector3:
 	var d := Tuning.COURT_DEPTH - Tuning.AIM_MARGIN
 	var out := Vector3(clampf(a.x, -w, w), 0.0, clampf(a.z, -d, d))
 	if act < 0:
-		act = current_act(p)
+		act = aim_act(p)
 	if act == Act.SERVE or act == Act.ATTACK or act == Act.DINK:
 		out.z = minf(out.z, -0.6) if s > 0.0 else maxf(out.z, 0.6)
 	return out
@@ -387,7 +410,11 @@ func _run_pending() -> void:
 
 func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 	var from := ball.position
-	if Vector2(from.x - p.position.x, from.z - p.position.z).length() > Tuning.REACH:
+	var dist := Vector2(from.x - p.position.x, from.z - p.position.z).length()
+	# um pouco longe demais: peixinho automático (alcança, mas o toque sai fraco). No ar não dá.
+	var dive := dist > Tuning.REACH and dist <= Tuning.DIVE_REACH and p.can_dive and p.is_grounded() \
+			and plan.act != Act.ATTACK and plan.act != Act.SERVE
+	if dist > Tuning.REACH and not dive:
 		_whiff(p, "LONGE")
 		return
 	var a := absf(err)
@@ -404,13 +431,19 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 	if plan.act == Act.SERVE:
 		_serve(p, aim, q, grade)
 		return
+	if dive:
+		q = minf(q, Tuning.DIVE_Q_MAX)
+		action_used.emit(p, Act.DIVE)
 	var act := plan.act
 	if act == Act.ATTACK and is_dink(p, aim):
 		act = Act.DINK
 		action_used.emit(p, Act.DINK)
 	var shot := resolver.resolve(self, p, act, aim, q, cap)
 	_launch(shot)
-	p.lunge(shot.from)
+	if dive:
+		p.dive(shot.from)
+	else:
+		p.lunge(shot.from)
 	if p.team != last_team:
 		touches = 1
 	else:

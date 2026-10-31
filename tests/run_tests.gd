@@ -42,6 +42,8 @@ func _run() -> void:
 	_test_block()
 	print("== largada ==")
 	_test_dink()
+	print("== peixinho ==")
+	_test_dive()
 	print("== regras da partida (sets) ==")
 	_test_match_rules()
 	print("== partida completa bot x bot ==")
@@ -747,6 +749,71 @@ func _test_dink() -> void:
 	_check(used[0] == 1 and game.last_kind == Game.Act.DINK, "bot mirando a 1,8 m da rede larga")
 	_check(not bool(pred["blocked"]) and land.z > 0.0 and Game.is_inside(land),
 			"largada passa por cima do bloqueio perfeito e cai dentro (%s)" % land)
+	_free_main(main)
+
+
+## Bola sua no contato, a `gap` m de você, com a ação `act`. Executa o toque (soltou no tempo).
+func _touch_at_gap(game: Game, human: Player, act: int, gap: float) -> Dictionary:
+	game.bots.clear()
+	game.state = Game.State.PLAY
+	game.rally_over = false
+	human.reset_state()
+	human.position = Vector3(0.0, 0.0, 4.0)
+	var h := Tuning.H_ATTACK if act == Game.Act.ATTACK else Tuning.H_RECEIVE
+	var at := Vector3(gap, h, 4.0)
+	game.ball.launch(at, Vector3.ZERO)
+	game.last_team = 1
+	game.touches = 1
+	game.plan = ContactPlan.new(human.team, 1, act, game.time, at, human)
+	var got := {"q": -1.0, "why": "", "dive": false}
+	var on_touch := func(_p: Player, _g: String, q: float) -> void: got["q"] = q
+	var on_whiff := func(_p: Player, why: String) -> void: got["why"] = why
+	var on_used := func(_p: Player, a: int) -> void: got["dive"] = got["dive"] or a == Game.Act.DIVE
+	game.touch_made.connect(on_touch)
+	game.whiffed.connect(on_whiff)
+	game.action_used.connect(on_used)
+	game._execute(human, Vector3(0.8, 0.0, 1.6), 0.0, 1.0)
+	game.touch_made.disconnect(on_touch)
+	game.whiffed.disconnect(on_whiff)
+	game.action_used.disconnect(on_used)
+	return got
+
+
+func _test_dive() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	game.bots.clear()
+	game.state = Game.State.PLAY
+	human.position = Vector3(0.0, 0.0, 4.0)
+	game.plan = ContactPlan.new(human.team, 1, Game.Act.RECEIVE, game.time + 0.4,
+			Vector3(2.0, Tuning.H_RECEIVE, 4.0), human)
+	_check(game.action_label(human) == "PEIXINHO", "parado a 2 m do anel: o botão avisa PEIXINHO")
+	human.position = Vector3(1.0, 0.0, 4.0)
+	_check(game.action_label(human) == "RECEBER", "dentro do alcance: continua RECEBER")
+
+	var got := _touch_at_gap(game, human, Game.Act.RECEIVE, 2.0)
+	_check(bool(got["dive"]) and float(got["q"]) > 0.0 and float(got["q"]) <= Tuning.DIVE_Q_MAX,
+			"bola a 2,0 m: peixinho alcança com qualidade ≤ %.1f (q=%.2f)" % [Tuning.DIVE_Q_MAX, got["q"]])
+	for _i in int(0.3 / DT):
+		human.step(DT)
+	var lying := human.position
+	human.move_input = Vector2(-1.0, 0.0)
+	for _i in int((Tuning.DIVE_RECOVER - 0.35) / DT):
+		human.step(DT)
+	_check(human.is_diving() and human.position.is_equal_approx(lying), "no chão o joystick não move")
+	for _i in int(0.4 / DT):
+		human.step(DT)
+	_check(not human.is_diving() and human.position.x < lying.x - 0.1, "depois de DIVE_RECOVER volta a andar")
+	human.move_input = Vector2.ZERO
+
+	got = _touch_at_gap(game, human, Game.Act.RECEIVE, 3.0)
+	_check(str(got["why"]) == "LONGE" and not bool(got["dive"]), "bola a 3,0 m: LONGE")
+	got = _touch_at_gap(game, human, Game.Act.ATTACK, 2.0)
+	_check(str(got["why"]) == "LONGE" and not bool(got["dive"]), "ataque nunca vira peixinho")
+	human.can_dive = false
+	got = _touch_at_gap(game, human, Game.Act.RECEIVE, 2.0)
+	_check(str(got["why"]) == "LONGE", "sem peixinho (bot no Fácil): LONGE")
 	_free_main(main)
 
 

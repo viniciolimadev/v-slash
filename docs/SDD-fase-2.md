@@ -373,3 +373,5 @@ Depois da fatia: rodar a simulação de equilíbrio (tabela do README em % de po
 | B-18 | O pulo de bloqueio é no lugar (mãos em x fixo, sem a deriva do pulo de ataque); depois dele o jogador não toca por `2·JUMP_TIME_UP + BLOCK_RECOVER` | deriva até o x previsto |
 | B-19 | Bloqueio ruim desvia por cima da rede (sem bater nela) para fora pela lateral mais perto: ponto do atacante | desvio aleatório que às vezes fica dentro |
 | B-20 | A largada é garantida pela **altura ao cruzar as mãos e a rede** (≥ `NET_HEIGHT + BLOCK_REACH + DINK_APEX_MARGIN`), não pelo ápice: com ápice alto mas antes da rede a bola já descia e batia no bloqueio | ápice, como o esboço |
+| B-21 | O peixinho vale para quem tem `Player.can_dive` (humano sempre; bot a partir do Médio): sem atalho de regra, é um atributo do jogador como a velocidade | parâmetro no `attempt_hit` |
+| B-22 | Ímãs e limites da mira usam a ação do plano durante o PEIXINHO (`Game.aim_act`): a recepção de peixinho continua grudando no levantador | ímãs próprios do peixinho |
