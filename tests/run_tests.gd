@@ -22,6 +22,8 @@ func _run() -> void:
 	_test_bot_vs_bot()
 	print("== humano roteirizado: aperta, mira e solta no tempo ==")
 	_test_scripted_human()
+	print("== controles de toque ==")
+	_test_touch_controls()
 	print("falhas: %d" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -201,6 +203,43 @@ func _test_scripted_human() -> void:
 	_check(int(stats["perfect"]) >= touches * 0.8, "soltar no anel fechado = PERFEITO")
 	_check(int(stats["points"]) > 10, "pontos saem com o humano jogando")
 	_free_main(main)
+
+
+func _test_touch_controls() -> void:
+	var main := _make_main(false)
+	var c: TouchControls = main.get("controls")
+	var screen := c.get_viewport_rect().size
+	var presses := [0]
+	c.action_pressed.connect(func() -> void: presses[0] += 1)
+	# polegar esquerdo encosta e arrasta para a direita
+	var left := Vector2(screen.x * 0.15, screen.y * 0.75)
+	c._input(_touch(0, left, true))
+	c._input(_drag(0, left + Vector2(c.JOY_RADIUS, 0.0)))
+	var move := c.get_move()
+	_check(move.x > 0.9 and absf(move.y) < 0.1, "joystick: toque na esquerda + arrastar move (%s)" % move)
+	_check(presses[0] == 0, "joystick: toque na esquerda não aperta o botão de ação")
+	# segundo dedo na direita = botão de ação, sem soltar o joystick
+	c._input(_touch(1, Vector2(screen.x * 0.85, screen.y * 0.75), true))
+	_check(presses[0] == 1, "botão: toque na direita aperta o botão de ação")
+	_check(c.get_move().x > 0.9, "multitoque: joystick continua ativo com o botão apertado")
+	c._input(_touch(0, left, false))
+	_check(c.get_move() == Vector2.ZERO, "joystick: soltar o dedo para o jogador")
+	_free_main(main)
+
+
+func _touch(index: int, pos: Vector2, pressed: bool) -> InputEventScreenTouch:
+	var e := InputEventScreenTouch.new()
+	e.index = index
+	e.position = pos
+	e.pressed = pressed
+	return e
+
+
+func _drag(index: int, pos: Vector2) -> InputEventScreenDrag:
+	var e := InputEventScreenDrag.new()
+	e.index = index
+	e.position = pos
+	return e
 
 
 func _make_main(autoplay: bool) -> Node:

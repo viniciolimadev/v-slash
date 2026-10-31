@@ -47,7 +47,7 @@ func _input(event: InputEvent) -> void:
 		if st.pressed:
 			if st.position.y < TOP_BAR:
 				return
-			if st.position.x < size.x * 0.5:
+			if st.position.x < _screen().x * 0.5:
 				if _joy_index == -1:
 					_joy_index = st.index
 					_joy_origin = st.position
@@ -87,12 +87,18 @@ func _input(event: InputEvent) -> void:
 			action_released.emit()
 
 
+## Tamanho da tela. Não usa `size`: este Control fica direto num CanvasLayer
+## e o tamanho dele pode ficar 0x0 (aí o joystick nunca era ativado).
+func _screen() -> Vector2:
+	return get_viewport_rect().size
+
+
 func _joy_home() -> Vector2:
-	return Vector2(170.0, size.y - 170.0)
+	return Vector2(170.0, _screen().y - 170.0)
 
 
 func _button_center() -> Vector2:
-	return Vector2(size.x - 170.0, size.y - 170.0)
+	return Vector2(_screen().x - 170.0, _screen().y - 170.0)
 
 
 func _draw() -> void:
