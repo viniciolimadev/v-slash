@@ -204,7 +204,7 @@ func _test_scripted_human() -> void:
 
 
 func _make_main(autoplay: bool) -> Node:
-	var main: Node = load("res://main.tscn").instantiate()
+	var main: Node = load("res://scenes/main.tscn").instantiate()
 	main.set("autoplay", autoplay)
 	root.add_child(main)
 	return main

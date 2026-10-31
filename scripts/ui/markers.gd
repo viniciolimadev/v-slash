@@ -54,7 +54,7 @@ func refresh() -> void:
 
 	# anel de timing: só quando a bola é sua
 	var plan := game.plan
-	var mine := flying and not plan.is_empty() and plan["player"] == human
+	var mine: bool = flying and not plan.is_empty() and plan["player"] == human
 	_ring.visible = mine
 	_approach.visible = false
 	if mine:
