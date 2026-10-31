@@ -1,11 +1,19 @@
+class_name MatchScene
 extends Node3D
-## Monta tudo por código: quadra, câmera, jogadores, bola, marcadores e UI.
+## Uma partida: monta tudo por código (quadra, câmera, jogadores, bola, marcadores e UI).
+## O App define `config` (e `save`) antes de adicionar a cena; sozinha, roda em rally infinito.
 ## Demo bot x bot: rode com o argumento de usuário  -- --autoplay
+
+signal match_finished(result: MatchResult)
+signal exit_requested
+signal tutorial_finished(skipped: bool)
 
 const HOME_COLOR := Color(0.13, 0.58, 0.92)
 const AWAY_COLOR := Color(0.95, 0.42, 0.24)
 
 var autoplay := false               # os dois lados controlados pela IA
+var config: MatchConfig = null      # null = padrão (rally infinito contra o Fácil)
+var save: SaveData = null           # só com o App: habilita Opções e Sair na pausa
 var game: Game
 var human: Player
 var foe: Player
@@ -14,11 +22,17 @@ var hud: Hud
 var markers: Markers
 var cam: Camera3D
 var stats := MatchStats.new()
+var pause_menu: PauseMenu
+var tutorial: TutorialDirector = null
+var _options: CanvasLayer = null
+var _finished := false
 
 
 func _ready() -> void:
 	if "--autoplay" in OS.get_cmdline_user_args():
 		autoplay = true
+	if config == null:
+		config = MatchConfig.new()
 	_setup_input()
 	_build_world()
 	_build_match()
@@ -29,6 +43,8 @@ func _physics_process(delta: float) -> void:
 	if not autoplay:
 		human.move_input = controls.get_move()
 	game.tick(delta)
+	if tutorial != null:
+		tutorial.tick(delta)
 
 
 func _process(_delta: float) -> void:
@@ -80,14 +96,24 @@ func _build_match() -> void:
 	game = Game.new()
 	add_child(game)
 	var players: Array[Player] = [human, foe]
-	var bots: Array[BotBrain] = [BotBrain.new(foe, game, game.bot_level)]
+	var bots: Array[BotBrain] = []
+	if not config.tutorial:
+		bots.append(BotBrain.new(foe, game, config.bot_level))
 	if autoplay:
 		bots.append(BotBrain.new(human, game, 1))
+	game.rules = MatchRules.new(0 if config.endless else Tuning.SET_POINTS)
 	game.setup(ball, players, bots)
+	game.set_bot_level(config.bot_level)
+	game.aim_sens = config.aim_sens
 	stats.attach(game)
 	markers = Markers.new()
 	add_child(markers)
 	markers.setup(game, human)
+	if config.tutorial:
+		tutorial = TutorialDirector.new()
+		tutorial.setup(game, human, markers)
+		add_child(tutorial)
+		tutorial.finished.connect(func(skipped: bool) -> void: tutorial_finished.emit(skipped))
 
 
 func _build_ui() -> void:
@@ -95,11 +121,27 @@ func _build_ui() -> void:
 	layer.layer = 1
 	add_child(layer)
 	controls = TouchControls.new()
+	controls.left_handed = config.left_handed
 	layer.add_child(controls)
 	hud = Hud.new()
 	hud.layer = 2
 	add_child(hud)
 	hud.set_level_name(game.level_name())
+	if config.tutorial:
+		hud.set_mode(Hud.Mode.TUTORIAL)
+	elif not config.endless:
+		hud.set_mode(Hud.Mode.MATCH)
+	pause_menu = PauseMenu.new()
+	add_child(pause_menu)
+	hud.pause_pressed.connect(pause_game)
+	pause_menu.resume_pressed.connect(resume_game)
+	pause_menu.restart_pressed.connect(func() -> void:
+		resume_game()
+		_on_reset())
+	pause_menu.options_pressed.connect(_open_options)
+	pause_menu.quit_pressed.connect(func() -> void:
+		resume_game()
+		exit_requested.emit())
 	controls.action_pressed.connect(_on_action_pressed)
 	controls.action_released.connect(_on_action_released)
 	controls.aim_dragged.connect(_on_aim_dragged)
@@ -160,7 +202,7 @@ func _on_touch(p: Player, grade: String, quality: float) -> void:
 		return
 	var perfect := quality >= 1.0
 	hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65))
-	if OS.has_feature("mobile"):
+	if config.vibration and OS.has_feature("mobile"):
 		Input.vibrate_handheld(45 if perfect else 20)
 
 
@@ -186,6 +228,82 @@ func _on_set_over(team: int, set_index: int, final: Vector2i) -> void:
 func _on_match_over(team: int) -> void:
 	var text := "VOCÊ VENCEU!" if team == human.team else "O BOT VENCEU"
 	hud.banner(text, _team_color(team), 3600.0)
+	get_tree().create_timer(Tuning.MATCH_END_DELAY).timeout.connect(finish_match)
+
+
+## Entrega o resultado (uma vez só) para quem abriu a partida.
+func finish_match() -> void:
+	if _finished or game.rules.winner < 0:
+		return
+	_finished = true
+	match_finished.emit(MatchResult.new(game.rules.winner, config.bot_level, game.rules.history, stats))
+
+
+# ---------------------------------------------------------------- pausa e opções
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		pause_game()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT and _is_touch_device():
+		pause_game()        # no PC perder o foco da janela não pausa (atrapalharia o e2e e o dev)
+	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		if get_tree().paused:
+			resume_game()
+		else:
+			pause_game()
+
+
+func pause_game() -> void:
+	if not is_inside_tree() or get_tree().paused:
+		return
+	game.cancel_aim()       # soltar o dedo depois de voltar não pode disparar um toque
+	get_tree().paused = true
+	pause_menu.open(save != null)
+
+
+func resume_game() -> void:
+	_close_options()
+	pause_menu.close()
+	get_tree().paused = false
+
+
+## Opções lidas do save valem na hora, inclusive com a partida pausada.
+func apply_options() -> void:
+	if save == null:
+		return
+	config.aim_sens = save.aim_sens
+	config.left_handed = save.left_handed
+	config.vibration = save.vibration
+	game.aim_sens = save.aim_sens
+	controls.left_handed = save.left_handed
+	controls.queue_redraw()
+
+
+func _open_options() -> void:
+	if save == null or _options != null:
+		return
+	pause_menu.close()
+	_options = CanvasLayer.new()
+	_options.layer = 6
+	_options.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_options)
+	var scr := OptionsScreen.new()
+	scr.save = save
+	scr.changed.connect(apply_options)
+	scr.closed.connect(func() -> void:
+		_close_options()
+		pause_menu.open(true))
+	_options.add_child(scr)
+
+
+func _close_options() -> void:
+	if _options != null:
+		_options.queue_free()
+		_options = null
+
+
+func _is_touch_device() -> bool:
+	return OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
 
 
 func _update_badge() -> void:

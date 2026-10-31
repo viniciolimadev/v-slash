@@ -40,6 +40,16 @@ func _run() -> void:
 	_test_stats()
 	print("== save ==")
 	_test_save()
+	print("== pausa ==")
+	_test_pause()
+	print("== modo canhoto ==")
+	_test_left_handed()
+	print("== tutorial ==")
+	_test_tutorial()
+	print("== fluxo de telas (App) ==")
+	_test_app_flow()
+	print("== duração: humano casual x Fácil ==")
+	_test_match_duration()
 	print("falhas: %d" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -535,6 +545,247 @@ func _test_save() -> void:
 	fresh.record_result(top)
 	_check(fresh.unlocked_level == 2 and top.unlocked == -1, "vencer o Difícil mantém o nível 2")
 	DirAccess.remove_absolute(path)
+
+
+func _test_pause() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var pm: PauseMenu = main.get("pause_menu")
+	var hits := [0]
+	game.touch_made.connect(func(_p: Player, _g: String, _q: float) -> void: hits[0] += 1)
+	game.whiffed.connect(func(_p: Player, _w: String) -> void: hits[0] += 1)
+	game.human_press(human)
+	main.call("pause_game")
+	_check(paused and not main.can_process() and pm.can_process() and pm.visible,
+			"pausa congela a partida e o menu continua ativo")
+	main.call("resume_game")
+	game.human_release(human)
+	_check(not paused and not pm.visible and hits[0] == 0, "soltar o dedo depois da pausa não dispara toque")
+	_free_main(main)
+
+
+func _test_left_handed() -> void:
+	var main := _make_main(false)
+	var c: TouchControls = main.get("controls")
+	c.left_handed = true
+	var screen := c.get_viewport_rect().size
+	var presses := [0]
+	c.action_pressed.connect(func() -> void: presses[0] += 1)
+	var right := Vector2(screen.x * 0.85, screen.y * 0.75)
+	c._input(_touch(0, right, true))
+	c._input(_drag(0, right + Vector2(c.JOY_RADIUS, 0.0)))
+	_check(c.get_move().x > 0.9 and presses[0] == 0, "canhoto: toque na direita é o joystick")
+	c._input(_touch(1, Vector2(screen.x * 0.15, screen.y * 0.75), true))
+	_check(presses[0] == 1, "canhoto: toque na esquerda é o botão de ação")
+	_free_main(main)
+
+
+## Humano roteirizado: anda até o anel e solta no tempo ideal. Só saca quando `serve` for true,
+## mirando em `serve_at`. Devolve o novo estado de "apertado".
+func _script_human(game: Game, human: Player, pressed: bool, serve: bool, serve_at: Vector3) -> bool:
+	human.move_input = Vector2.ZERO
+	var act := game.current_act(human)
+	if act == Game.Act.SERVE:
+		if not serve:
+			return pressed
+		if not pressed:
+			game.human_press(human)
+			var d := (serve_at - game.human_aim) / (Tuning.AIM_SENS * game.aim_sens)
+			game.human_drag(human, Vector2(d.x, d.z))
+			return true
+		game.human_release(human)
+		return false
+	if act != Game.Act.NONE:
+		var at := game.plan.pos
+		var to := Vector2(at.x - human.position.x, at.z - human.position.z)
+		if to.length() > 0.1:
+			human.move_input = to.normalized() * clampf(to.length() / 0.5, 0.0, 1.0)
+		if not pressed and game.time >= game.plan.t - 0.5:
+			game.human_press(human)
+			return true
+		if pressed and game.time >= game.plan.t - DT * 0.5:
+			game.human_release(human)
+			return false
+		return pressed
+	if pressed:
+		game.human_release(human)
+	return false
+
+
+func _zone_pos(game: Game, human: Player, zone: String) -> Vector3:
+	for m in game.aim_magnets(human, Game.Act.SERVE):
+		if str(m["name"]) == zone:
+			return m["pos"]
+	return Vector3.ZERO
+
+
+func _test_tutorial() -> void:
+	var cfg := MatchConfig.new()
+	cfg.tutorial = true
+	var main := _make_main_cfg(cfg)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var tut: TutorialDirector = main.get("tutorial")
+	var done := [-1]
+	tut.finished.connect(func(skipped: bool) -> void: done[0] = 1 if skipped else 0)
+	var target := _zone_pos(game, human, TutorialDirector.TARGET_ZONE)
+	var pressed := false
+	var steps_seen := {}
+	for _i in int(180.0 / DT):
+		pressed = _script_human(game, human, pressed, tut.step == TutorialDirector.Step.AIM, target)
+		game.tick(DT)
+		tut.tick(DT)
+		steps_seen[tut.step] = true
+		if done[0] >= 0:
+			break
+	_check(steps_seen.size() == 4 and done[0] == 0, "humano roteirizado completa os 3 passos (%s)" % [steps_seen.keys()])
+	_check(game.bots.is_empty(), "tutorial sem bot")
+	_free_main(main)
+	main = _make_main_cfg(cfg)
+	tut = main.get("tutorial")
+	done[0] = -1
+	tut.finished.connect(func(skipped: bool) -> void: done[0] = 1 if skipped else 0)
+	tut.skip()
+	_check(done[0] == 1, "PULAR encerra o tutorial")
+	_free_main(main)
+
+
+func _buttons(scr: Screen) -> Array[Button]:
+	var out: Array[Button] = []
+	for c in scr.column.get_children():
+		if c is Button:
+			out.append(c)
+	return out
+
+
+func _test_app_flow() -> void:
+	var path := "user://test_app.cfg"
+	DirAccess.remove_absolute(path)
+	var app: Node = load("res://scenes/app.tscn").instantiate()
+	var save := SaveData.new(path)
+	app.set("save", save)
+	root.add_child(app)
+	_check(app.get("screen") is TitleScreen, "app abre no título")
+	app.call("show_level_select")
+	var btns := _buttons(app.get("screen"))
+	_check(btns.size() == 4 and not btns[0].disabled and btns[1].disabled and btns[2].disabled,
+			"save novo: só o Fácil liberado")
+	btns[0].pressed.emit()
+	var m: MatchScene = app.get("match_node")
+	_check(m != null and m.tutorial != null, "primeira partida passa pelo tutorial")
+	m.tutorial.skip()
+	m = app.get("match_node")
+	_check(save.tutorial_done and m != null and m.tutorial == null, "pular o tutorial abre a partida")
+	var game := m.game
+	_check(not game.rules.is_endless() and game.bot_level == 0 and game.bots.size() == 1,
+			"partida de verdade (sets) contra o Fácil")
+	# fim forçado: 1 set a 0 e match point
+	game.rules.sets = [1, 0]
+	game.rules.history = [Vector2i(15, 9)]
+	game.rules.points = [14, 3]
+	game.state = Game.State.PLAY
+	game.rally_over = false
+	game._award(0, "Teste")
+	_check(game.state == Game.State.MATCH_OVER, "match point convertido encerra a partida")
+	m.finish_match()
+	var res = app.get("screen")
+	_check(res is ResultScreen and (res as ResultScreen).result.unlocked == 1, "resultado aparece e avisa o Médio liberado")
+	var r := SaveData.new(path)
+	r.load_file()
+	_check(r.wins[0] == 1 and r.unlocked_level == 1 and r.tutorial_done, "vitória gravada no arquivo")
+	app.call("start_match", 1)
+	m = app.get("match_node")
+	m.pause_game()
+	_check(paused and m.pause_menu.visible, "partida do App pausa")
+	m.pause_menu.quit_pressed.emit()
+	_check(app.get("screen") is TitleScreen and not paused, "Sair para o menu volta ao título e despausa")
+	root.remove_child(app)
+	app.free()
+	DirAccess.remove_absolute(path)
+
+
+## Partida inteira com um humano "casual" (reação 0,4 s, erro de timing ~90 ms) contra o Fácil.
+func _test_match_duration() -> void:
+	var minutes: Array[float] = []
+	var won := 0
+	for seed in [3, 5, 7, 9, 11, 13, 17, 19]:
+		var cfg := MatchConfig.new()
+		cfg.endless = false
+		var main := _make_main_cfg(cfg)
+		var game: Game = main.get("game")
+		var human: Player = main.get("human")
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed
+		game.rng.seed = seed
+		for b in game.bots:
+			b.rng.seed = seed
+		var zones := game.aim_magnets(human, Game.Act.SERVE)
+		var st := {"seen": -1, "react": 0.0, "release": 0.0, "pressed": false, "serve_t": 0.0}
+		var t0 := game.time
+		while game.state != Game.State.MATCH_OVER and game.time - t0 < 3600.0:
+			human.move_input = Vector2.ZERO
+			var act := game.current_act(human)
+			if act == Game.Act.SERVE:
+				st["serve_t"] = float(st["serve_t"]) + DT
+				if not st["pressed"] and float(st["serve_t"]) > 0.8:
+					game.human_press(human)
+					_drag_to(game, human, zones[rng.randi() % zones.size()]["pos"])
+					st["pressed"] = true
+				elif st["pressed"] and float(st["serve_t"]) > 1.1:
+					game.human_release(human)
+					st["pressed"] = false
+					st["serve_t"] = 0.0
+			elif act != Game.Act.NONE:
+				var plan := game.plan
+				if game.plan_id != int(st["seen"]):
+					st["seen"] = game.plan_id
+					st["react"] = game.time + (0.4 if plan.n == 1 else 0.05)
+					st["release"] = plan.t + rng.randfn(0.0, 0.09)
+				if game.time >= float(st["react"]):
+					var to := Vector2(plan.pos.x - human.position.x, plan.pos.z - human.position.z)
+					if to.length() > 0.1:
+						human.move_input = to.normalized() * clampf(to.length() / 0.5, 0.0, 1.0)
+					if not st["pressed"] and game.time >= float(st["release"]) - 0.5:
+						game.human_press(human)
+						var aim := game.default_aim(human)
+						if act == Game.Act.ATTACK or act == Game.Act.FREEBALL:
+							aim = zones[rng.randi() % zones.size()]["pos"]
+						_drag_to(game, human, aim)
+						st["pressed"] = true
+					elif st["pressed"] and game.time >= float(st["release"]):
+						game.human_release(human)
+						st["pressed"] = false
+			elif st["pressed"]:
+				game.human_release(human)
+				st["pressed"] = false
+			game.tick(DT)
+		var mins := (game.time - t0) / 60.0
+		minutes.append(mins)
+		if game.rules.winner == 0:
+			won += 1
+		print("  semente %d: %s  %s  %.1f min" % [seed, "venceu" if game.rules.winner == 0 else "perdeu",
+				game.rules.history, mins])
+		_free_main(main)
+	var avg := 0.0
+	for mm in minutes:
+		avg += mm / minutes.size()
+	# meta do SDD (RNF-1.01) é 4–7 min; medido 7,8 min com sets de 15 (decisão pendente com o dono).
+	# Este limite só protege contra regressão: partidas ficando bem mais longas que hoje.
+	print("  média %.1f min (meta 4–7 min)" % avg)
+	_check(avg <= 8.5, "partida casual x Fácil não fica mais longa que hoje (média %.1f min <= 8,5)" % avg)
+
+
+func _drag_to(game: Game, human: Player, target: Vector3) -> void:
+	var d := (target - game.human_aim) / (Tuning.AIM_SENS * game.aim_sens)
+	game.human_drag(human, Vector2(d.x, d.z))
+
+
+func _make_main_cfg(cfg: MatchConfig) -> Node:
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	main.set("config", cfg)
+	root.add_child(main)
+	return main
 
 
 func _make_main(autoplay: bool) -> Node:
