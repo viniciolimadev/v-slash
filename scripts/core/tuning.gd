@@ -63,6 +63,10 @@ const SERVE_GRAV := [11.0, 11.0, 16.0]       # m/s²: a viagem tem "topspin" (= 
 const SERVE_WINDOW := [1.0, 1.0, 0.7]        # multiplica WINDOW_EARLY/LATE, PERFECT e GOOD
 const SERVE_SCATTER := [0.4, 0.8, 1.6]       # m de dispersão com qualidade 0
 const SERVE_Q_UNDER := 0.9                   # por baixo não tem timing: qualidade fixa
+const FLOAT_AMP := Vector2(0.35, 0.7)        # m de oscilação lateral do flutuante (qualidade 0 → 1)
+const FLOAT_FREQ := 4.5                      # rad/s da oscilação (~1 balanço por saque)
+const FLOAT_REVEAL := 0.45                   # s antes do contato em que o anel mostra a posição certa
+const FLOAT_SLIDE := 0.15                    # s que o anel leva deslizando até a posição certa
 
 # --- Jogador ---
 const MOVE_SPEED := 6.2

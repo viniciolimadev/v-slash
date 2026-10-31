@@ -12,6 +12,8 @@ class Shot:
 	var grav: float
 	var kind: int           # Game.Act efetivo (recepção mandada para o outro lado vira FREEBALL)
 	var target: Vector3
+	var wobble_amp := 0.0   # m; só o saque flutuante oscila
+	var wobble_phase := 0.0
 
 
 var rng: RandomNumberGenerator      # o mesmo do Game (testes com semente continuam iguais)
@@ -84,7 +86,27 @@ func serve(game: Game, p: Player, serve_kind: int, from: Vector3, aim: Vector3, 
 		shot.vel = BallSim.launch_velocity(from, to, t, grav)
 	else:
 		shot.vel = BallSim.clear_net_velocity(from, to, t, grav)
+	if serve_kind == ServeType.Kind.FLOAT:
+		shot.wobble_amp = lerpf(Tuning.FLOAT_AMP.x, Tuning.FLOAT_AMP.y, q)   # saque melhor = mais oscilação
+		shot.wobble_phase = rng.randf() * TAU
+		_cancel_drift(shot)
 	return shot
+
+
+## A oscilação muda o caminho, não o destino: tira da velocidade em x o deslocamento que ela
+## causaria até o pouso. Se o balanço levaria a bola para fora da antena, inverte a fase.
+func _cancel_drift(shot: Shot) -> void:
+	var base := shot.vel
+	var t_land := BallSim.flight_time(shot.from, base, shot.grav)
+	var t_net := -shot.from.z / base.z if absf(base.z) > 1e-6 else 0.0
+	for flip in 2:
+		var drift := BallSim.wobble_offset(shot.wobble_amp, Tuning.FLOAT_FREQ, shot.wobble_phase, t_land)
+		shot.vel = Vector3(base.x - drift / t_land, base.y, base.z)
+		var x_net := shot.from.x + shot.vel.x * t_net \
+				+ BallSim.wobble_offset(shot.wobble_amp, Tuning.FLOAT_FREQ, shot.wobble_phase, t_net)
+		if absf(x_net) <= Tuning.COURT_HALF_W - 0.2 or flip == 1:
+			return
+		shot.wobble_phase += PI
 
 
 ## Erro de mira pela qualidade: até base·(1 − q) metros, distribuído no disco.

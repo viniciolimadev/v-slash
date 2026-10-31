@@ -34,6 +34,8 @@ var plan: ContactPlan = null        # ver _make_plan()
 var plan_id := 0
 var land_point := Vector3.ZERO      # onde a bola cai se ninguém tocar
 var land_in := true
+var land_display := Vector3.ZERO    # ponto de queda "sem efeito" (flutuante); ver land_view()
+var land_t := 0.0                   # relógio do pouso previsto
 var bot_level := 0                  # começa no Fácil: a meta da Fase 0 é sentir o gesto
 var rng := RandomNumberGenerator.new()
 var resolver := HitResolver.new(rng)
@@ -146,6 +148,22 @@ func window_scale() -> float:
 	if plan != null and plan.act == Act.SERVE:
 		return float(Tuning.SERVE_WINDOW[serve_type[plan.team]])
 	return 1.0
+
+
+## Onde a tela e o bot enxergam o contato do plano: no flutuante, a trajetória sem oscilação
+## até FLOAT_REVEAL s antes do toque; depois o anel desliza para o lugar certo.
+func plan_view_pos(pl: ContactPlan) -> Vector3:
+	return _reveal(pl.display_pos, pl.pos, pl.t)
+
+
+## Ponto de queda que a tela mostra (mesma leitura atrasada do anel).
+func land_view() -> Vector3:
+	return _reveal(land_display, land_point, land_t)
+
+
+func _reveal(fake: Vector3, real: Vector3, t_event: float) -> Vector3:
+	var k := clampf((time - (t_event - Tuning.FLOAT_REVEAL)) / Tuning.FLOAT_SLIDE, 0.0, 1.0)
+	return fake.lerp(real, k)
 
 
 func opponent_of(team: int) -> Player:
@@ -390,6 +408,7 @@ func _serve(p: Player, aim: Vector3, q: float, grade: String = "SAQUE") -> void:
 		from = p.position + Vector3(0.0, float(Tuning.SERVE_CONTACT_H[kind]), -0.3 * s)
 	var shot := resolver.serve(self, p, kind, from, aim, q)
 	ball.launch(shot.from, shot.vel, shot.grav)
+	ball.sim.set_wobble(shot.wobble_amp, Tuning.FLOAT_FREQ, shot.wobble_phase)
 	p.serving = false
 	state = State.PLAY
 	last_team = p.team
@@ -450,6 +469,15 @@ func _make_plan() -> void:
 	var pred := ball.sim.predict()
 	land_point = pred["land"]
 	land_in = is_inside(land_point)
+	land_t = time + _last_time(pred)
+	land_display = land_point
+	var plain := {}
+	if ball.sim.wobble_amp != 0.0:
+		# leitura atrasada: a mesma conta sem a oscilação (é o que "parece" que vai acontecer)
+		var no_wobble := ball.sim.copy()
+		no_wobble.wobble_amp = 0.0
+		plain = no_wobble.predict()
+		land_display = plain["land"]
 	var recv_side := side_of_point(land_point)
 	var recv_team := 0 if recv_side > 0.0 else 1
 	var n := 1 if recv_team != last_team else touches + 1
@@ -467,9 +495,20 @@ func _make_plan() -> void:
 		if hit.is_empty():
 			continue
 		var at: Vector3 = hit["pos"]
+		var shown := at
+		if not plain.is_empty():
+			var fake := BallSim.find_descent(plain, float(opt[1]), recv_side)
+			if not fake.is_empty():
+				shown = fake["pos"]
 		plan = ContactPlan.new(recv_team, n, int(opt[0]), time + float(hit["t"]), at,
-				_closest_player(recv_team, at))
+				_closest_player(recv_team, shown))
+		plan.display_pos = shown
 		return
+
+
+static func _last_time(pred: Dictionary) -> float:
+	var times: PackedFloat64Array = pred["times"]
+	return times[times.size() - 1]
 
 
 func _closest_player(team: int, at: Vector3) -> Player:
@@ -531,7 +570,7 @@ func _update_assists() -> void:
 	var who := plan.player
 	if who != null:
 		who.magnet_on = true
-		who.magnet_point = plan.pos
+		who.magnet_point = plan_view_pos(plan)
 
 
 # ---------------------------------------------------------------- pontos

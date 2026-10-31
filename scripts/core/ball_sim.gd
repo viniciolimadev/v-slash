@@ -3,6 +3,7 @@ extends RefCounted
 ## Física determinística da bola: parábola exata + rede + chão.
 ## A bola real e o preditor (anel, ponto de queda, bot) usam a MESMA função,
 ## então o marcador mostra exatamente onde a bola vai estar.
+## Saque flutuante: oscilação lateral analítica em x (wobble), somada à parábola.
 
 enum Ev { CROSS, NET, ANTENNA, LAND }
 
@@ -11,6 +12,10 @@ var vel := Vector3.ZERO
 var g := Tuning.GRAVITY             # gravidade deste voo (a cortada usa mais: efeito topspin)
 var landed := false
 var net_hits := 0
+var age := 0.0                      # s desde o lançamento
+var wobble_amp := 0.0               # m (0 = bola normal)
+var wobble_freq := 0.0              # rad/s
+var wobble_phase := 0.0
 
 
 func copy() -> BallSim:
@@ -20,7 +25,31 @@ func copy() -> BallSim:
 	b.g = g
 	b.landed = landed
 	b.net_hits = net_hits
+	b.age = age
+	b.wobble_amp = wobble_amp
+	b.wobble_freq = wobble_freq
+	b.wobble_phase = wobble_phase
 	return b
+
+
+func set_wobble(amp: float, freq: float, phase: float) -> void:
+	wobble_amp = amp
+	wobble_freq = freq
+	wobble_phase = phase
+
+
+## Deslocamento em x que a oscilação causa entre o lançamento e o instante t.
+static func wobble_offset(amp: float, freq: float, phase: float, t: float) -> float:
+	return amp * (sin(freq * t + phase) - sin(phase))
+
+
+## Tempo de voo de p0 até o centro da bola chegar ao chão (sem rede).
+static func flight_time(p0: Vector3, v0: Vector3, grav: float = Tuning.GRAVITY) -> float:
+	var b := BallSim.new()
+	b.pos = p0
+	b.vel = v0
+	b.g = grav
+	return b._time_to_height(Tuning.BALL_RADIUS)
 
 
 ## Velocidade inicial para sair de p0 e passar por p1 depois de t segundos.
@@ -93,6 +122,7 @@ func advance(dt: float) -> Array:
 			var from_side := -signf(vel.z)
 			pos.z = from_side * (Tuning.BALL_RADIUS + 0.01)
 			vel = Vector3(vel.x * 0.5, minf(vel.y, 0.0) * 0.5, -vel.z * Tuning.NET_BOUNCE)
+			wobble_amp = 0.0        # bola morta na rede não flutua mais
 			events.append({"type": Ev.NET, "pos": pos})
 		else:
 			var outside := absf(pos.x) > Tuning.COURT_HALF_W + Tuning.BALL_RADIUS
@@ -131,7 +161,11 @@ static func find_descent(pred: Dictionary, h: float, side: float) -> Dictionary:
 
 func _move(t: float) -> void:
 	pos += vel * t + Vector3(0.0, -0.5 * g * t * t, 0.0)
+	if wobble_amp != 0.0:
+		# termo exato (não integrado): o preditor com outro passo dá o mesmo x
+		pos.x += wobble_amp * (sin(wobble_freq * (age + t) + wobble_phase) - sin(wobble_freq * age + wobble_phase))
 	vel.y -= g * t
+	age += t
 
 
 ## Tempo até o centro da bola descer até a altura h (INF se nunca).

@@ -365,3 +365,5 @@ Depois da fatia: rodar a simulação de equilíbrio (tabela do README em % de po
 | B-10 | A nota do saque com timing vai no sinal novo `served(player, kind, grade)`; `touch_made` continua com "SAQUE" (as estatísticas não contam saque como toque) | nota no `touch_made` |
 | B-11 | Viagem sem "passo à frente": só o pulo automático (o sacador fica preso atrás da linha) | animar o passo na Fase 4 |
 | B-12 | Fora do App (F6) o seletor de saque fica à esquerda do botão do nível do bot | só na partida do App |
+| B-13 | O flutuante sorteia a fase da oscilação; se o balanço levaria a bola para fora da antena ao cruzar a rede, a fase é invertida (o erro do flutuante é de leitura, não de sorte) | deixar sair pela antena |
+| B-14 | O ponto de queda revela `FLOAT_REVEAL` s antes do **pouso**; o anel, antes do **contato** | os dois pelo contato |

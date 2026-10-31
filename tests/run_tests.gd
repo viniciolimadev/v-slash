@@ -36,6 +36,8 @@ func _run() -> void:
 	_test_hit_resolver()
 	print("== tipos de saque ==")
 	_test_serve_types()
+	print("== saque flutuante ==")
+	_test_float_physics()
 	print("== regras da partida (sets) ==")
 	_test_match_rules()
 	print("== partida completa bot x bot ==")
@@ -540,6 +542,78 @@ func _test_serve_types() -> void:
 			and MatchConfig.from_save(back, 0).serve_type == ServeType.Kind.JUMP,
 			"tipo de saque salvo e recarregado; save versão 1 usa POR BAIXO")
 	DirAccess.remove_absolute(path)
+
+
+func _test_float_physics() -> void:
+	# 1) preditor (passo 1/120) = bola real (passo 1/60) com oscilação
+	var b := BallSim.new()
+	b.pos = Vector3(1.0, 2.45, 7.6)
+	b.vel = BallSim.clear_net_velocity(b.pos, Vector3(-1.0, Tuning.BALL_RADIUS, -5.0), 1.3)
+	b.set_wobble(0.7, Tuning.FLOAT_FREQ, 0.9)
+	var pred := b.predict()
+	var real := b.copy()
+	var plain := b.copy()
+	plain.wobble_amp = 0.0
+	var max_dx := 0.0
+	while not real.landed:
+		real.advance(DT)
+		plain.advance(DT)
+		max_dx = maxf(max_dx, absf(real.pos.x - plain.pos.x))
+	var land: Vector3 = pred["land"]
+	_check(land.distance_to(real.pos) < 0.001, "flutuante: preditor = bola real (erro %.5f m)" % land.distance_to(real.pos))
+	_check(max_dx > 0.2, "flutuante: a bola oscila de lado no caminho (%.2f m)" % max_dx)
+
+	# 2) a oscilação muda o caminho, não o destino
+	var main := _serve_setup(ServeType.Kind.FLOAT, true)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var worst := 0.0
+	for i in 12:
+		game.rng.seed = 40 + i
+		var aim := Vector3(-2.6 + 0.47 * i, 0.0, -5.5 + 0.35 * i)
+		var shot := game.resolver.serve(game, human, ServeType.Kind.FLOAT, Vector3(0.6, 2.45, 7.6), aim, 1.0)
+		var sim := BallSim.new()
+		sim.pos = shot.from
+		sim.vel = shot.vel
+		sim.g = shot.grav
+		sim.set_wobble(shot.wobble_amp, Tuning.FLOAT_FREQ, shot.wobble_phase)
+		var p2 := sim.predict()
+		var hit: Vector3 = p2["land"]
+		worst = maxf(worst, Vector2(hit.x - shot.target.x, hit.z - shot.target.z).length())
+	_check(worst < 0.001, "flutuante cai no ponto mirado (pior erro %.5f m)" % worst)
+
+	# 3) leitura atrasada: anel do recebedor na trajetória "sem efeito" até FLOAT_REVEAL
+	game.rng.seed = 5
+	_release_at(game, human, 0.0)
+	var plan: ContactPlan = game.plan
+	var ok_plan := plan != null and plan.act == Game.Act.RECEIVE
+	var gap := plan.display_pos.distance_to(plan.pos) if ok_plan else 0.0
+	_check(ok_plan and gap > 0.05, "flutuante: anel mostrado ≠ contato real antes da revelação (%.2f m)" % gap)
+	var before_ok := ok_plan and game.plan_view_pos(plan).is_equal_approx(plan.display_pos)
+	while ok_plan and game.time < plan.t - Tuning.FLOAT_REVEAL + Tuning.FLOAT_SLIDE + DT:
+		game.tick(DT)
+		if game.plan != plan:
+			break
+	_check(before_ok and game.plan == plan and game.plan_view_pos(plan).is_equal_approx(plan.pos),
+			"anel desliza para a posição certa nos últimos %.2f s" % Tuning.FLOAT_REVEAL)
+	_free_main(main)
+
+	# 4) antena: o x oscilando é que leva a bola para fora
+	for amp: float in [0.0, 0.7]:
+		var a := BallSim.new()
+		a.pos = Vector3(3.3, 2.6, 4.0)
+		a.vel = BallSim.clear_net_velocity(a.pos, Vector3(3.3, Tuning.BALL_RADIUS, -4.0), 1.0)
+		var t_net := -a.pos.z / a.vel.z
+		a.set_wobble(amp, Tuning.FLOAT_FREQ, PI * 0.5 - Tuning.FLOAT_FREQ * t_net)
+		var seen := -1
+		while not a.landed and seen < 0:
+			for e in a.advance(DT):
+				if int(e["type"]) == BallSim.Ev.ANTENNA or int(e["type"]) == BallSim.Ev.CROSS:
+					seen = int(e["type"])
+		if amp == 0.0:
+			_check(seen == BallSim.Ev.CROSS, "sem oscilação a bola passa dentro da antena")
+		else:
+			_check(seen == BallSim.Ev.ANTENNA, "com oscilação a mesma bola sai pela antena")
 
 
 ## Joga pontos seguidos de um time.

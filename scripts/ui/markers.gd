@@ -69,7 +69,8 @@ func refresh() -> void:
 
 	# ponto de queda (se ninguém tocar)
 	_land.visible = flying and game.state != Game.State.SERVE_TOSS
-	_land.position = Vector3(game.land_point.x, 0.02, game.land_point.z)
+	var lv := game.land_view()
+	_land.position = Vector3(lv.x, 0.02, lv.z)
 
 	# zona destacada (tutorial)
 	_hl_dot.visible = false
@@ -90,7 +91,7 @@ func refresh() -> void:
 	_ring.visible = mine
 	_approach.visible = false
 	if mine:
-		var at := plan.pos
+		var at := game.plan_view_pos(plan)
 		_ring.position = Vector3(at.x, 0.04, at.z)
 		_ring_mat.albedo_color = _act_color(plan.act)
 		var remaining := plan.t - game.time

@@ -73,8 +73,8 @@ func tick(_dt: float) -> void:
 		p.holding = false
 		_go_to(home)
 		return
-	var target := plan.pos
-	_go_to(target)
+	# mesma leitura do humano: no flutuante, a posição certa só perto do contato
+	_go_to(game.plan_view_pos(plan))
 	var act := plan.act
 	p.holding = act == Game.Act.ATTACK
 	if game.time >= _hit_at:
@@ -91,7 +91,7 @@ func _go_to(target: Vector3) -> void:
 
 
 func _clearly_out() -> bool:
-	var lp := game.land_point
+	var lp := game.land_view()
 	return absf(lp.x) > Tuning.COURT_HALF_W + 0.3 or absf(lp.z) > Tuning.COURT_DEPTH + 0.3
 
 
