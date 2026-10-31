@@ -1,0 +1,140 @@
+// Teste de ponta a ponta no navegador, emulando um celular na horizontal com toque.
+// Abre a versão Web, arrasta o analógico, aperta o botão de ação e confere
+// (pelos pixels da tela) que o jogador azul realmente se moveu.
+//
+//   node tests/e2e/mobile_smoke.js <url-ou-pasta-export/web> [pasta-dos-prints]
+//
+// Precisa do pacote "playwright" (npm i playwright && npx playwright install chromium).
+// Sai com código 1 se algo falhar.
+
+const { chromium } = require('playwright');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+const target = process.argv[2] || 'export/web';
+const outDir = process.argv[3] || 'export/e2e';
+const W = 915, H = 412; // Galaxy S20 deitado
+
+let fails = 0;
+function check(ok, what) {
+  console.log((ok ? '  ok     ' : '  FALHA  ') + what);
+  if (!ok) fails++;
+}
+
+// serve a pasta export/web se não for uma URL
+function serve(dir) {
+  const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm',
+    '.pck': 'application/octet-stream', '.png': 'image/png' };
+  return new Promise((resolve) => {
+    const srv = http.createServer((req, res) => {
+      const file = path.join(dir, decodeURIComponent(req.url.split('?')[0]).replace(/^\/$/, '/index.html'));
+      fs.readFile(file, (err, data) => {
+        if (err) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream' });
+        res.end(data);
+      });
+    });
+    srv.listen(0, () => resolve(srv));
+  });
+}
+
+// centro dos pixels do jogador (azul forte) num print PNG, decodificado no próprio navegador
+async function playerCenter(decoder, png) {
+  return decoder.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = 'data:image/png;base64,' + b64;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data;
+    let sx = 0, sy = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], gr = d[i + 1], b = d[i + 2];
+      if (r < 70 && gr > 100 && gr < 190 && b > 180) {
+        const p = i / 4;
+        sx += p % c.width; sy += Math.floor(p / c.width); n++;
+      }
+    }
+    return n > 30 ? { x: sx / n, y: sy / n, n } : null;
+  }, png.toString('base64'));
+}
+
+(async () => {
+  fs.mkdirSync(outDir, { recursive: true });
+  let url = target, srv = null;
+  if (!/^https?:/.test(target)) {
+    srv = await serve(target);
+    url = `http://localhost:${srv.address().port}/index.html`;
+  }
+  console.log('== celular (toque) em ' + url + ' ==');
+
+  const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const ctx = await browser.newContext({ viewport: { width: W, height: H }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error' || /SCRIPT ERROR/.test(m.text())) errors.push(m.text()); });
+  const decoder = await (await browser.newContext()).newPage();
+
+  await page.goto(url);
+  await page.waitForFunction(() => document.querySelector('canvas') && window.Engine !== undefined, null, { timeout: 30000 });
+  await page.waitForTimeout(6000); // engine + cena
+
+  const cdp = await ctx.newCDPSession(page);
+  const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', {
+    type, touchPoints: pts.map(([x, y, id]) => ({ x, y, id })) });
+
+  const shot = async (name) => {
+    const png = await page.screenshot({ path: path.join(outDir, name + '.png') });
+    return playerCenter(decoder, png);
+  };
+
+  const p0 = await shot('0-inicio');
+  check(p0 !== null, 'jogo carregou e o jogador aparece na tela');
+
+  // analógico: polegar na esquerda, arrasta para a direita e segura
+  const jx = W * 0.15, jy = H * 0.75;
+  await touch('touchStart', [[jx, jy, 0]]);
+  for (let i = 1; i <= 8; i++) {
+    await touch('touchMove', [[jx + i * 10, jy, 0]]);
+    await page.waitForTimeout(30);
+  }
+  await page.waitForTimeout(1200);
+  const p1 = await shot('1-analogico-direita');
+  await touch('touchEnd', []);
+  const dx = p0 && p1 ? p1.x - p0.x : 0;
+  check(dx > 15, `analógico para a direita move o jogador (${dx.toFixed(0)} px)`);
+
+  // e para a esquerda
+  await touch('touchStart', [[jx, jy, 0]]);
+  for (let i = 1; i <= 8; i++) {
+    await touch('touchMove', [[jx - i * 10, jy, 0]]);
+    await page.waitForTimeout(30);
+  }
+  await page.waitForTimeout(1200);
+  const p2 = await shot('2-analogico-esquerda');
+  await touch('touchEnd', []);
+  const dx2 = p1 && p2 ? p2.x - p1.x : 0;
+  check(dx2 < -15, `analógico para a esquerda move o jogador (${dx2.toFixed(0)} px)`);
+
+  // botão de ação: segura, arrasta a mira, solta (saque)
+  const bx = W * 0.85, by = H * 0.75;
+  await touch('touchStart', [[bx, by, 1]]);
+  await page.waitForTimeout(300);
+  await touch('touchMove', [[bx - 30, by - 20, 1]]);
+  await page.waitForTimeout(300);
+  await shot('3-mirando');
+  await touch('touchEnd', []);
+  await page.waitForTimeout(1500);
+  await shot('4-depois-do-saque');
+
+  check(errors.length === 0, 'sem erros no console' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
+  console.log('prints em ' + outDir);
+  console.log('falhas: ' + fails);
+  await browser.close();
+  if (srv) srv.close();
+  process.exit(fails > 0 ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });

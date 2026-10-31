@@ -74,6 +74,16 @@ godot --headless --script res://tests/run_tests.gd     # física, câmera, bot x
 godot -- --autoplay                                    # demo bot x bot
 ```
 
+Teste no navegador emulando celular (toque no analógico e no botão, com prints):
+
+```bash
+godot --headless --export-release "Web" export/web/index.html
+npm i playwright && npx playwright install chromium
+node tests/e2e/mobile_smoke.js export/web export/e2e  # prints em export/e2e
+```
+
+No CI os prints ficam em Actions → execução → Artifacts → `e2e-screenshots`.
+
 ## Estrutura
 
 ```

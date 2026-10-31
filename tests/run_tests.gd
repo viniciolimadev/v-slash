@@ -24,6 +24,8 @@ func _run() -> void:
 	_test_scripted_human()
 	print("== controles de toque ==")
 	_test_touch_controls()
+	print("== HUD (layout) ==")
+	_test_hud_layout()
 	print("falhas: %d" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -224,6 +226,23 @@ func _test_touch_controls() -> void:
 	_check(c.get_move().x > 0.9, "multitoque: joystick continua ativo com o botão apertado")
 	c._input(_touch(0, left, false))
 	_check(c.get_move() == Vector2.ZERO, "joystick: soltar o dedo para o jogador")
+	_free_main(main)
+
+
+func _test_hud_layout() -> void:
+	var main := _make_main(false)
+	var hud: Hud = main.get("hud")
+	var c: TouchControls = main.get("controls")
+	var screen := hud.get_viewport().get_visible_rect().size
+	var root := hud.get_child(0) as Control
+	_check(root.size.is_equal_approx(screen), "HUD ocupa a tela toda (%s)" % root.size)
+	_check(c.size.is_equal_approx(screen), "controles de toque ocupam a tela toda (%s)" % c.size)
+	var score := hud.get("_score") as Label
+	_check(absf(score.get_global_rect().get_center().x - screen.x * 0.5) < 2.0, "placar centralizado")
+	var lvl := hud.get("_level_btn") as Button
+	var r := lvl.get_global_rect()
+	_check(r.position.x >= 0.0 and r.end.x <= screen.x and r.position.x > screen.x * 0.5,
+			"botão do nível do bot visível no canto direito (%s)" % r)
 	_free_main(main)
 
 

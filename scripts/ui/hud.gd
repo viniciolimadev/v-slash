@@ -18,7 +18,8 @@ func _ready() -> void:
 	var root := Control.new()
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# "and_offsets": só set_anchors_preset() mantém o retângulo atual (0x0)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_score = _make_label(root, 34, 8.0, 46.0)
 	_rally = _make_label(root, 20, 52.0, 28.0)
 	_popup = _make_label(root, 46, 84.0, 60.0)
@@ -26,7 +27,7 @@ func _ready() -> void:
 	_popup.modulate.a = 0.0
 	_message.modulate.a = 0.0
 
-	var reset := _make_button(root, "↺ Reiniciar")
+	var reset := _make_button(root, "Reiniciar")
 	reset.position = Vector2(14.0, 12.0)
 	reset.pressed.connect(func() -> void: reset_pressed.emit())
 
@@ -81,7 +82,7 @@ func _make_label(parent: Control, font_size: int, top: float, height: float) -> 
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(l)
-	l.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	l.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	l.offset_top = top
 	l.offset_bottom = top + height
 	return l

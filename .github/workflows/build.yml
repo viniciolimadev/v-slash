@@ -82,6 +82,22 @@ jobs:
           $GODOT --headless --export-release "Web" export/web/index.html
           test -f export/web/index.wasm
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Mobile e2e (touch, headless Chromium)
+        run: |
+          npm install --no-save --no-package-lock playwright@1.63.0
+          npx playwright install --with-deps chromium
+          node tests/e2e/mobile_smoke.js export/web export/e2e
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-screenshots
+          path: export/e2e
+
       - name: Export Android (debug APK)
         env:
           GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ github.workspace }}/debug.keystore

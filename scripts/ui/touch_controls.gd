@@ -31,7 +31,7 @@ var _key_down := false
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 
 ## Direção do movimento: joystick tem prioridade; senão, teclado.
