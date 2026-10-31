@@ -282,10 +282,18 @@ func _test_aim() -> void:
 	game.human_release(human)
 	_check(not game.human_aim_view().is_empty(), "mira continua visível depois do toque")
 	# a mira não pula quando a jogada muda (ex.: o bot ataca e vira recepção)
+	# determinístico: semente fixa e você saca quando é a sua vez (senão o jogo para)
+	game.rng.seed = 7
 	var before: Vector3 = game.human_aim
 	var acts := {}
-	for _i in int(20.0 / DT):
-		acts[game.current_act(human)] = true
+	for _i in int(60.0 / DT):
+		var now_act := game.current_act(human)
+		acts[now_act] = true
+		if now_act == Game.Act.RECEIVE:
+			break
+		if now_act == Game.Act.SERVE:
+			game.human_press(human)
+			game.human_release(human)
 		game.tick(DT)
 		if not game.human_aim.is_equal_approx(before):
 			break
