@@ -49,7 +49,7 @@ func tick(_dt: float) -> void:
 		p.holding = false
 		return
 	var plan := game.plan
-	if plan.is_empty() or plan["player"] != p:
+	if plan == null or plan.player != p:
 		p.holding = false
 		_go_to(home)
 		return
@@ -57,10 +57,10 @@ func tick(_dt: float) -> void:
 	if game.plan_id != _plan_seen:
 		# bola nova: decide uma vez (reação, erro de timing, deixar cair se for fora)
 		_plan_seen = game.plan_id
-		var from_foe := int(plan["n"]) == 1
+		var from_foe := plan.n == 1
 		_react_until = game.time + (float(Tuning.BOT_REACTION[level]) if from_foe else 0.05)
 		var err := rng.randfn(0.0, float(Tuning.BOT_TIMING_SIGMA[level]))
-		_hit_at = float(plan["t"]) + clampf(err, -0.3, 0.13)
+		_hit_at = plan.t + clampf(err, -0.3, 0.13)
 		_will_play = true
 		if from_foe and _clearly_out() and rng.randf() < float(Tuning.BOT_READS_OUT[level]):
 			_will_play = false
@@ -71,9 +71,9 @@ func tick(_dt: float) -> void:
 		p.holding = false
 		_go_to(home)
 		return
-	var target: Vector3 = plan["pos"]
+	var target := plan.pos
 	_go_to(target)
-	var act := int(plan["act"])
+	var act := plan.act
 	p.holding = act == Game.Act.ATTACK
 	if game.time >= _hit_at:
 		_hit_at = INF

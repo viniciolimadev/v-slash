@@ -60,14 +60,14 @@ func refresh() -> void:
 
 	# anel de timing: só quando a bola é sua
 	var plan := game.plan
-	var mine: bool = flying and not plan.is_empty() and plan["player"] == human
+	var mine: bool = flying and plan != null and plan.player == human
 	_ring.visible = mine
 	_approach.visible = false
 	if mine:
-		var at: Vector3 = plan["pos"]
+		var at := plan.pos
 		_ring.position = Vector3(at.x, 0.04, at.z)
-		_ring_mat.albedo_color = _act_color(int(plan["act"]))
-		var remaining := float(plan["t"]) - game.time
+		_ring_mat.albedo_color = _act_color(plan.act)
+		var remaining := plan.t - game.time
 		if remaining > -Tuning.WINDOW_LATE:
 			_approach.visible = true
 			_approach.position = _ring.position

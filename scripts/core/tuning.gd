@@ -40,6 +40,7 @@ const GOOD := 0.16
 const EARLY_SNAP := 0.06           # toque adiantado só executa perto do ponto ideal
 const RING_LEAD := 1.0             # o anel começa a fechar 1 s antes
 const WHIFF_COOLDOWN := 0.4
+const MAX_TOUCHES := 3           # toques por lado (no 1v1, todos do mesmo jogador)
 
 # --- Dispersão do alvo (m) quando a qualidade é 0 ---
 const SCATTER_RECEIVE := 1.8
