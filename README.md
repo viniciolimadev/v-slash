@@ -116,4 +116,4 @@ tests/run_tests.gd     testes headless
 
 ## Fora da Fase 0 (de propósito)
 
-Bloqueio, peixinho, stamina e tipos de saque → Fase 2 · regra de dois toques e 2v2 → Fases 1 e 3 · arte e som → Fase 4.
+Partida em sets, telas e save → Fase 1 · bloqueio, peixinho, stamina e tipos de saque → Fase 2 · 2v2 → Fase 3 · arte e som → Fase 4. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).
