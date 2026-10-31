@@ -1,17 +1,20 @@
 class_name Hud
 extends CanvasLayer
-## Placar, contador de rally (meta da Fase 0: 5+ toques), feedback de timing e botões do topo.
+## Placar (pontos e sets), selo de set/match point, rally, feedback de timing e botões do topo.
 
 signal reset_pressed
 signal level_pressed
 
 var _score: Label
 var _rally: Label
+var _badge: Label
+var _banner: Label
 var _popup: Label
 var _message: Label
 var _level_btn: Button
 var _popup_tw: Tween
 var _msg_tw: Tween
+var _banner_tw: Tween
 
 
 func _ready() -> void:
@@ -22,10 +25,13 @@ func _ready() -> void:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_score = _make_label(root, 34, 8.0, 46.0)
 	_rally = _make_label(root, 20, 52.0, 28.0)
-	_popup = _make_label(root, 46, 84.0, 60.0)
-	_message = _make_label(root, 30, 142.0, 44.0)
+	_badge = _make_label(root, 22, 80.0, 28.0)
+	_popup = _make_label(root, 46, 108.0, 60.0)
+	_message = _make_label(root, 30, 166.0, 44.0)
+	_banner = _make_label(root, 44, 250.0, 70.0)
 	_popup.modulate.a = 0.0
 	_message.modulate.a = 0.0
+	_banner.modulate.a = 0.0
 
 	var reset := _make_button(root, "Reiniciar")
 	reset.position = Vector2(14.0, 12.0)
@@ -40,9 +46,18 @@ func _ready() -> void:
 	_level_btn.pressed.connect(func() -> void: level_pressed.emit())
 
 
-func set_board(score: Array[int], rally: int, best: int) -> void:
-	_score.text = "VOCÊ %d  ×  %d BOT" % [score[0], score[1]]
-	_rally.text = "Rally: %d toques   ·   Recorde: %d" % [rally, best]
+func set_board(rules: MatchRules, rally: int, best: int) -> void:
+	_score.text = "VOCÊ %d  ×  %d BOT" % [rules.points[0], rules.points[1]]
+	var line := "Rally: %d toques   ·   Recorde: %d" % [rally, best]
+	if not rules.is_endless():
+		line = "Sets %d – %d   ·   " % [rules.sets[0], rules.sets[1]] + line
+	_rally.text = line
+
+
+## Selo fixo sob o placar ("SET POINT", "MATCH POINT"); texto vazio esconde.
+func set_badge(text: String, color: Color) -> void:
+	_badge.text = text
+	_badge.modulate = color
 
 
 func set_level_name(level_text: String) -> void:
@@ -69,6 +84,17 @@ func message(text: String, color: Color) -> void:
 	_msg_tw = create_tween()
 	_msg_tw.tween_interval(1.2)
 	_msg_tw.tween_property(_message, "modulate:a", 0.0, 0.4)
+
+
+## Faixa grande no meio da tela (fim de set, fim de partida).
+func banner(text: String, color: Color, secs: float) -> void:
+	_banner.text = text
+	_banner.modulate = color
+	if _banner_tw != null and _banner_tw.is_valid():
+		_banner_tw.kill()
+	_banner_tw = create_tween()
+	_banner_tw.tween_interval(secs)
+	_banner_tw.tween_property(_banner, "modulate:a", 0.0, 0.4)
 
 
 func _make_label(parent: Control, font_size: int, top: float, height: float) -> Label:

@@ -10,6 +10,13 @@ const NET_HEIGHT := 2.43
 const NET_HALF_LEN := 4.2          # a rede passa um pouco das antenas
 const LINE_TOLERANCE := 0.05       # bola na linha = dentro
 
+# --- Partida ---
+const SET_POINTS := 15
+const SETS_TO_WIN := 2             # melhor de 3
+const WIN_BY := 2                  # vantagem mínima para fechar o set
+const POINT_PAUSE := 1.8           # s entre um ponto e o próximo saque
+const SET_PAUSE := 3.0             # s de faixa "Fim do set" antes do saque seguinte
+
 # --- Bola ---
 const BALL_RADIUS := 0.16          # maior que a real (0,105) p/ ler na tela do celular
 const GRAVITY := 11.0              # acima de 9,8 = jogo mais ágil

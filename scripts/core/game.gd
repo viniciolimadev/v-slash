@@ -6,8 +6,10 @@ extends Node
 signal point_scored(team: int, reason: String)
 signal touch_made(player: Player, grade: String, quality: float)
 signal whiffed(player: Player, why: String)
+signal set_over(team: int, set_index: int, final: Vector2i)
+signal match_over(team: int)
 
-enum State { SERVE_WAIT, PLAY, POINT_PAUSE }
+enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER }
 enum Act { NONE, SERVE, RECEIVE, SET_BALL, ATTACK, FREEBALL }
 
 const ACT_LABELS := ["", "SACAR", "RECEBER", "LEVANTAR", "ATACAR", "PASSAR"]
@@ -18,7 +20,7 @@ var ball: Ball
 var players: Array[Player] = []
 var bots: Array[BotBrain] = []
 var human: Player = null
-var score: Array[int] = [0, 0]
+var rules := MatchRules.new(0)      # infinito por padrão; a partida de verdade troca por regras com sets
 var server_team := 0
 var server: Player = null
 var last_team := -1                 # time que tocou por último
@@ -38,6 +40,8 @@ var human_aiming := false
 ## A bola vai para onde ela está (os ímãs ajudam quando ela está perto de um alvo).
 var human_aim := Vector3.ZERO
 var _pause_t := 0.0
+var _next_server := 0
+var _set_break := false             # a pausa atual é de fim de set
 var _pending: Array[Dictionary] = []
 
 
@@ -55,9 +59,10 @@ func setup(p_ball: Ball, p_players: Array[Player], p_bots: Array[BotBrain]) -> v
 
 
 func reset_match() -> void:
-	score = [0, 0]
+	rules = rules.fresh()
 	best_rally = 0
-	_reset_for_serve(0)
+	_set_break = false
+	_reset_for_serve(rules.first_server(0))
 
 
 func set_bot_level(lvl: int) -> void:
@@ -87,7 +92,10 @@ func tick(dt: float) -> void:
 	if state == State.POINT_PAUSE:
 		_pause_t -= dt
 		if _pause_t <= 0.0:
-			_reset_for_serve(server_team)
+			if _set_break:
+				_set_break = false
+				rules.start_next_set()
+			_reset_for_serve(_next_server)
 	_update_assists()
 
 
@@ -521,18 +529,28 @@ func _award(team: int, reason: String) -> void:
 	if rally_over or team < 0 or team > 1:
 		return
 	rally_over = true
-	score[team] += 1
 	best_rally = maxi(best_rally, rally_touches)
-	server_team = team
 	state = State.POINT_PAUSE
-	_pause_t = 1.8
+	_pause_t = Tuning.POINT_PAUSE
+	_next_server = team                 # rally point: saca quem fez o ponto
 	plan = null
 	plan_id += 1
 	_pending.clear()
 	human_aiming = false
 	for p in players:
 		p.holding = false
+	var r := rules.add_point(team)
+	if bool(r["match_over"]):
+		state = State.MATCH_OVER        # fim: ninguém saca mais
+	elif bool(r["set_over"]):
+		_set_break = true
+		_pause_t = Tuning.SET_PAUSE
+		_next_server = rules.first_server(rules.set_index + 1)
 	point_scored.emit(team, reason)
+	if bool(r["set_over"]):
+		set_over.emit(team, rules.set_index, rules.history[-1])
+	if bool(r["match_over"]):
+		match_over.emit(team)
 
 
 func _reset_for_serve(team: int) -> void:

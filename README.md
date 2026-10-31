@@ -41,6 +41,7 @@ Timing ruim = bola menos precisa (e cortada mais fraca). Longe do anel = "LONGE"
 | bola boa ainda sai / nunca sai | `AIM_MARGIN`, `ASSIST_KEEP_IN_Q` |
 | jogo lento/rápido | `GRAVITY`, `T_RECEIVE`, `T_SET_HIGH` |
 | bot forte/fraco | `BOT_SPEED`, `BOT_REACTION`, `BOT_POWER` |
+| partida longa/curta | `SET_POINTS`, `SETS_TO_WIN`, `WIN_BY`, `POINT_PAUSE` |
 
 Equilíbrio dos valores atuais (simulação de 20 min por linha, "humano" com reação e erro de timing):
 

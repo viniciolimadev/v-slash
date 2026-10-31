@@ -169,6 +169,7 @@ var sets: Array[int] = [0, 0]
 var set_index := 0                   # 0, 1, 2
 var history: Array[Vector2i] = []    # placar final de cada set (x = time 0)
 var winner := -1                     # time vencedor da partida (-1 = em andamento)
+var set_closed := false              # set acabou e o próximo ainda não começou (sem selo, sem ponto)
 
 
 func _init(p_set_points := Tuning.SET_POINTS, p_sets_to_win := Tuning.SETS_TO_WIN,
@@ -226,7 +227,7 @@ const SET_PAUSE := 3.0             # s de faixa "Fim do set"
 - `set_board(rules: MatchRules, rally: int, best: int)`; placar `VOCÊ 12 × 9 BOT`, abaixo `Sets 1 – 0` (oculto em modo infinito).
 - `set_badge(text: String, color: Color)` — selo fixo sob o placar: "SET POINT" (amarelo) / "MATCH POINT" (laranja), cor do time; vazio quando nenhum.
 - `banner(text: String, secs: float)` — faixa grande central (fim de set).
-- Botões do topo: "Reiniciar" e "Bot: X" saem; entra um botão **II** (pausa) no canto esquerdo. Em modo infinito sem `App` (F5 em `main.tscn`), o botão de nível continua, para não perder o atalho de ajuste.
+- Botões do topo (PR 5): "Reiniciar" e "Bot: X" saem; entra um botão **II** (pausa) no canto esquerdo. Em modo infinito sem `App` (F5 em `main.tscn`), o botão de nível continua, para não perder o atalho de ajuste.
 
 **Pronto quando:** testes de `MatchRules` (seção 6) passam; partida bot × bot com regras reais termina.
 
@@ -447,7 +448,7 @@ enum Step { MOVE, TIMING, AIM, DONE }
 | PR | Conteúdo | Depende de | Risco |
 |---|---|---|---|
 | 1 | 1.1 `ContactPlan` + `MAX_TOUCHES` | — | baixo (refatoração com testes) |
-| 2 | 1.2 `MatchRules` + estados/sinais no `Game` + HUD (placar, selos, faixa, botão II sem ação) | 1 | médio |
+| 2 | 1.2 `MatchRules` + estados/sinais no `Game` + HUD (placar, selos, faixa). A partida fica infinita até o PR 5 ligar as regras pela `MatchConfig` | 1 | médio |
 | 3 | 1.3 `MatchStats` + `MatchResult` | 2 | baixo |
 | 4 | 1.4 `SaveData` | 3 | baixo |
 | 5 | 1.5 `App`, `MatchConfig`, telas, pausa, `main_scene` → `app.tscn`, e2e do fluxo | 2–4 | **alto** (muda a entrada do app) |
