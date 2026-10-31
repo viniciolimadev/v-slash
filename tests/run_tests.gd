@@ -28,6 +28,8 @@ func _run() -> void:
 	_test_hud_layout()
 	print("== mira ==")
 	_test_aim()
+	print("== assistência de mira ==")
+	_test_aim_assist()
 	print("falhas: %d" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -281,6 +283,38 @@ func _test_aim() -> void:
 	_check(not game.human_aim_view().is_empty(), "mira continua visível depois do toque")
 	var rec: Vector3 = game._aims[Game.Act.RECEIVE]
 	_check(rec.z * s > 0.0, "mira da recepção é separada e continua no seu lado")
+	_free_main(main)
+
+
+func _test_aim_assist() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var foe: Player = main.get("foe")
+	var s := Game.side_of_team(human.team)
+	game.tick(DT)
+	# a mira não sai da quadra, por mais que você arraste
+	game.human_press(human)
+	game.human_drag(human, Vector2(5000.0, -5000.0))
+	var a: Vector3 = game.human_aim
+	_check(Game.is_inside(a) and absf(a.x) <= Tuning.COURT_HALF_W - Tuning.AIM_MARGIN + 0.01,
+			"mira presa dentro da quadra (%s)" % a)
+	# ímã: perto do canto do fundo gruda em FUNDO DIR/ESQ
+	game.human_aim = Vector3(2.0 * s, 0.0, -5.2 * s)
+	var v := game.human_aim_view()
+	_check(str(v["name"]) == "FUNDO DIR", "ímã de ataque: perto do canto gruda em FUNDO DIR (%s)" % v["name"])
+	game.human_release(human)
+	# recepção gruda no levantador
+	var spot := Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s)
+	game.plan = {"player": human, "act": Game.Act.RECEIVE, "t": game.time, "pos": human.position}
+	game.state = Game.State.PLAY
+	var info := game.snap_aim(human, spot + Vector3(1.0, 0.0, 0.8))
+	_check(str(info["name"]) == "LEVANTADOR", "ímã de recepção: gruda no levantador")
+	# bot não ganha ímã de ataque/recepção
+	_check(game.aim_magnets(foe, Game.Act.ATTACK).is_empty(), "bot sem assistência de mira")
+	# toque bom: alvo fora da quadra é trazido para dentro
+	var k := Game.keep_inside(Vector3(9.0, 0.0, -12.0))
+	_check(Game.is_inside(k), "toque BOM não manda a bola para fora (%s)" % k)
 	_free_main(main)
 
 

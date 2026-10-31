@@ -156,13 +156,46 @@ func set_magnets(team: int) -> Array:
 	]
 
 
-## Mira final (no levantamento gruda no alvo mais próximo).
+## Alvos que "puxam" a mira em cada jogada. Levantamento vale para todos;
+## saque/ataque e recepção são assistência só do humano.
+func aim_magnets(p: Player, act: int) -> Array:
+	var s := side_of_team(p.team)
+	if act == Act.SET_BALL:
+		return set_magnets(p.team)
+	if not p.is_human:
+		return []
+	if act == Act.RECEIVE:
+		return [{"name": "LEVANTADOR", "quick": false,
+				"pos": Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s)}]
+	var out := []
+	for z in Tuning.ATTACK_ZONES:
+		var v: Vector2 = z[1]
+		# câmera atrás do time 0: direita da tela = +x; o time 1 vê espelhado
+		out.append({"name": z[0], "quick": false, "pos": Vector3(v.x * s, 0.0, -v.y * s)})
+	return out
+
+
+func _magnet_radius(act: int) -> float:
+	if act == Act.SET_BALL:
+		return Tuning.SET_MAGNET_RADIUS
+	if act == Act.RECEIVE:
+		return Tuning.RECEIVE_MAGNET_RADIUS
+	return Tuning.AIM_MAGNET_RADIUS
+
+
+## Mira final: gruda no alvo mais próximo da jogada (se estiver perto).
 func snap_aim(p: Player, raw: Vector3) -> Dictionary:
 	var out := {"pos": raw, "name": "", "quick": false}
-	if current_act(p) != Act.SET_BALL or side_of_point(raw) != side_of_team(p.team):
+	var act := current_act(p)
+	var mags := aim_magnets(p, act)
+	if mags.is_empty():
 		return out
-	var best_d := Tuning.SET_MAGNET_RADIUS
-	for m in set_magnets(p.team):
+	# só gruda se a mira estiver do mesmo lado dos alvos (mirar do outro lado = sua escolha)
+	var mag_side := side_of_point(mags[0]["pos"])
+	if side_of_point(raw) != mag_side:
+		return out
+	var best_d := _magnet_radius(act)
+	for m in mags:
 		var mp: Vector3 = m["pos"]
 		var d := Vector2(mp.x - raw.x, mp.z - raw.z).length()
 		if d < best_d:
@@ -185,8 +218,9 @@ func default_aim(p: Player) -> Vector3:
 
 func clamp_aim(p: Player, a: Vector3) -> Vector3:
 	var s := side_of_team(p.team)
-	var w := Tuning.COURT_HALF_W + 1.2
-	var d := Tuning.COURT_DEPTH + 1.2
+	# assistência: a mira nunca sai da quadra
+	var w := Tuning.COURT_HALF_W - Tuning.AIM_MARGIN
+	var d := Tuning.COURT_DEPTH - Tuning.AIM_MARGIN
 	var out := Vector3(clampf(a.x, -w, w), 0.0, clampf(a.z, -d, d))
 	var act := current_act(p)
 	if act == Act.SERVE or act == Act.ATTACK:
@@ -304,6 +338,8 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 		kind = Act.FREEBALL
 	target = _scatter(target, kind, q)
 	target = _keep_side(target, -s if over else s, 0.4)
+	if p.is_human and q >= Tuning.ASSIST_KEEP_IN_Q:
+		target = keep_inside(target)
 	var v := Vector3.ZERO
 	var grav := Tuning.GRAVITY
 	if kind == Act.RECEIVE:
@@ -339,7 +375,10 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 func _serve(p: Player, aim: Vector3) -> void:
 	var s := side_of_team(p.team)
 	var q := 0.85                      # Fase 0: saque sem timing (barra de força chega na Fase 2)
-	var target := _keep_side(_scatter(aim, Act.SERVE, q), -s, 0.8)
+	var snapped: Vector3 = snap_aim(p, aim)["pos"]
+	var target := _keep_side(_scatter(snapped, Act.SERVE, q), -s, 0.8)
+	if p.is_human and q >= Tuning.ASSIST_KEEP_IN_Q:
+		target = keep_inside(target)
 	var from := p.position + Vector3(0.0, 1.05, -0.3 * s)
 	var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
 	ball.launch(from, BallSim.clear_net_velocity(from, to, Tuning.T_SERVE))
@@ -370,6 +409,13 @@ func _scatter(target: Vector3, kind: int, q: float) -> Vector3:
 	var r := base * (1.0 - q) * sqrt(rng.randf())
 	var ang := rng.randf() * TAU
 	return target + Vector3(cos(ang) * r, 0.0, sin(ang) * r)
+
+
+## Assistência: traz o alvo para dentro da quadra (com folga das linhas).
+static func keep_inside(v: Vector3, margin: float = 0.3) -> Vector3:
+	var w := Tuning.COURT_HALF_W - margin
+	var d := Tuning.COURT_DEPTH - margin
+	return Vector3(clampf(v.x, -w, w), v.y, clampf(v.z, -d, d))
 
 
 ## Garante o alvo do lado `s` (+1/-1), a pelo menos min_dist da rede.
