@@ -35,13 +35,14 @@ Design detalhado: [SDD-fase-1.md](SDD-fase-1.md).
 ## Fase 2 — Profundidade (1v1)
 
 **Meta:** dar escolhas ao jogador além de "acertar o tempo": arriscar ou jogar seguro, atacar ou defender na rede.
+Design detalhado: [SDD-fase-2.md](SDD-fase-2.md).
 
 | # | Fatia | Detalhe |
 |---|---|---|
 | 2.1 | Tipos de saque | **Por baixo** (seguro, lento) · **Viagem** (pulo, forte, janela de timing menor) · **Flutuante** (trajetória oscila: ponto de queda só fica certo perto do fim). Escolha antes de sacar. O preditor de `ball_sim.gd` precisa suportar o flutuante. |
 | 2.2 | Bloqueio | Quando o adversário vai atacar e você está perto da rede, o botão vira BLOQUEAR. Resultado pelo timing: ponto · amortece (bola fica do seu lado, conta como toque) · toca e sai. Bot aprende a bloquear e a atacar desviando do bloqueio. |
-| 2.3 | Ataque variado | **Largada** (bola curta por cima do bloqueio) além da cortada: arrastar curto = largada, longo = cortada. |
-| 2.4 | Peixinho | Bola fora do `REACH`: gesto rápido (deslizar) estica o alcance, mas você fica no chão um tempo. Toque de peixinho é sempre de qualidade baixa. |
+| 2.3 | Ataque variado | **Largada** (bola curta por cima do bloqueio) além da cortada: mirar numa zona curta = largada (o botão mostra LARGAR). |
+| 2.4 | Peixinho | Bola um pouco fora do `REACH`: o toque vira peixinho sozinho (o botão mostra PEIXINHO), alcança mais, mas você fica no chão um tempo. Qualidade sempre baixa. |
 | 2.5 | Stamina (experimental) | Viagem, cortada forte e peixinho gastam; recupera entre pontos. Atrás de uma flag — entra só se o teste no celular mostrar que melhora a decisão sem frustrar. |
 
 **Pronto quando:** cada mecânica tem teste headless e é usada pelo bot; simulação mostra que o Difícil usa bloqueio/flutuante e o equilíbrio fica perto da tabela atual.
@@ -51,6 +52,7 @@ Design detalhado: [SDD-fase-1.md](SDD-fase-1.md).
 ## Fase 3 — 2v2
 
 **Meta:** o jogo de dupla, com parceiro IA e a regra real (ninguém toca duas vezes seguidas).
+Design detalhado: [SDD-fase-3.md](SDD-fase-3.md).
 
 | # | Fatia | Detalhe |
 |---|---|---|
@@ -67,6 +69,7 @@ Design detalhado: [SDD-fase-1.md](SDD-fase-1.md).
 ## Fase 4 — Arte e som
 
 **Meta:** trocar as formas simples por algo bonito sem perder 60 fps em Android médio (renderer Compatibility).
+Design detalhado: [SDD-fase-4.md](SDD-fase-4.md).
 
 | # | Fatia | Detalhe |
 |---|---|---|
@@ -81,7 +84,9 @@ Design detalhado: [SDD-fase-1.md](SDD-fase-1.md).
 
 ---
 
-## Fase 5 — Lançamento (proposta)
+## Fase 5 — Lançamento
+
+Design detalhado: [SDD-fase-5.md](SDD-fase-5.md).
 
 Export release assinado, ícone e splash, Play Store (teste interno → aberto), página/itch.io da versão Web, telemetria opcional e anônima (duração de partida, rally médio, onde o jogador perde pontos) para afinar o equilíbrio.
 

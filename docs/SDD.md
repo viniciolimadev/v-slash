@@ -319,6 +319,8 @@ Detalhamento completo (assinaturas, telas, testes, ordem dos PRs): [SDD-fase-1.m
 
 ### 9.2 Fase 2 — Profundidade
 
+Detalhamento completo: [SDD-fase-2.md](SDD-fase-2.md). Onde os dois divergirem, vale o detalhado.
+
 | Mudança | Design |
 |---|---|
 | Tipos de saque | `enum ServeType { UNDER, JUMP, FLOAT }`. Saque passa a ter timing (anel no lançamento da bola). JUMP: janela menor, velocidade maior. FLOAT: `BallSim` ganha um termo lateral **determinístico** `x += A·sin(ω·t + φ)` com φ sorteado no lançamento e guardado no estado — `predict()` reproduz exatamente; o *marcador* é que mostra o ponto de queda com incerteza até os últimos ~0,4 s. |
@@ -329,6 +331,8 @@ Detalhamento completo (assinaturas, telas, testes, ordem dos PRs): [SDD-fase-1.m
 | Bot | `BotBrain` ganha decisão de tipo de saque, bloqueio por nível e ataque desviando do bloqueio. |
 
 ### 9.3 Fase 3 — 2v2
+
+Detalhamento completo: [SDD-fase-3.md](SDD-fase-3.md). Onde os dois divergirem, vale o detalhado.
 
 | Mudança | Design |
 |---|---|
@@ -341,6 +345,8 @@ Detalhamento completo (assinaturas, telas, testes, ordem dos PRs): [SDD-fase-1.m
 
 ### 9.4 Fase 4 — Arte e som
 
+Detalhamento completo: [SDD-fase-4.md](SDD-fase-4.md). Onde os dois divergirem, vale o detalhado.
+
 | Mudança | Design |
 |---|---|
 | Separação lógica × visual | `Player` mantém a lógica; o visual vira uma cena filha `PlayerView` (modelo glTF + `AnimationTree`) que reage a `swing(kind)`, pulo e corrida. Mesma ideia para `Ball` e `Court`. Testes headless continuam sem depender de assets. |
@@ -350,6 +356,8 @@ Detalhamento completo (assinaturas, telas, testes, ordem dos PRs): [SDD-fase-1.m
 | Medição | e2e registra fps médio e p1; CI falha se o APK passar do limite. |
 
 ### 9.5 Fase 5 — Lançamento
+
+Detalhamento completo: [SDD-fase-5.md](SDD-fase-5.md). Onde os dois divergirem, vale o detalhado.
 Preset Android release com keystore em segredo do GitHub (`GODOT_ANDROID_KEYSTORE_RELEASE_*`), AAB para a Play Store, `version/code` incrementado pelo CI. Telemetria opcional e anônima (consentimento na 1ª abertura) com eventos de fim de partida: modo, nível, duração, rally médio, motivos de ponto. Página de privacidade.
 
 ---
@@ -414,6 +422,7 @@ Preset Android release com keystore em segredo do GitHub (`GODOT_ANDROID_KEYSTOR
 | ADR-06 | Bot usa a **mesma API** do humano (`attempt_hit`) | regra nova vale para os dois automaticamente |
 | ADR-07 | Renderer **Compatibility** | roda em Android de entrada e na Web |
 | ADR-08 | **CI gera Web + APK** a cada push | testar no celular sem instalar o editor |
+| ADR-09 | A partir da Fase 4, **visual em cenas e assets** (`assets/`, `scenes/views/`); a lógica continua só em código e não carrega arquivos | arte de verdade sem perder testes headless; substitui a ADR-03 ([SDD-fase-4](SDD-fase-4.md)) |
 
 ### 13.1 Decisões de produto (2026-10-31)
 
