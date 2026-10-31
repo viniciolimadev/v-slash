@@ -35,7 +35,6 @@ const T_RECEIVE := 1.35
 const T_SET_HIGH := 1.15
 const T_SET_QUICK := 0.75
 const T_FREEBALL := 1.5
-const T_SERVE := 1.45
 const ATTACK_SPEED_MIN := 9.0      # m/s na horizontal com toque ruim
 const ATTACK_SPEED_MAX := 14.0     # m/s na horizontal com toque perfeito
 const NET_CLEARANCE := 0.12        # folga mínima acima da rede
@@ -54,7 +53,16 @@ const MAX_TOUCHES := 3           # toques por lado (no 1v1, todos do mesmo jogad
 const SCATTER_RECEIVE := 1.8
 const SCATTER_SET := 1.2
 const SCATTER_ATTACK := 2.2
-const SCATTER_SERVE := 0.7
+
+# --- Saque (índice = ServeType.Kind: POR BAIXO, FLUTUANTE, VIAGEM) ---
+const SERVE_HAND_H := 1.5          # m: altura da mão que lança a bola para cima
+const SERVE_TOSS_H := [0.0, 1.2, 2.6]        # m que a bola sobe acima da mão; 0 = sem lançamento
+const SERVE_CONTACT_H := [1.05, 2.45, 3.0]   # m: altura do contato (centro da bola)
+const SERVE_TIME := [1.45, 1.3, 1.05]        # s de voo até o alvo (por baixo = saque da Fase 1)
+const SERVE_GRAV := [11.0, 11.0, 16.0]       # m/s²: a viagem tem "topspin" (= SPIKE_GRAVITY)
+const SERVE_WINDOW := [1.0, 1.0, 0.7]        # multiplica WINDOW_EARLY/LATE, PERFECT e GOOD
+const SERVE_SCATTER := [0.4, 0.8, 1.6]       # m de dispersão com qualidade 0
+const SERVE_Q_UNDER := 0.9                   # por baixo não tem timing: qualidade fixa
 
 # --- Jogador ---
 const MOVE_SPEED := 6.2

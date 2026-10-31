@@ -9,6 +9,7 @@ var tutorial := false
 var aim_sens := 1.0
 var left_handed := false
 var vibration := true
+var serve_type := ServeType.Kind.UNDER
 
 
 static func from_save(save: SaveData, level: int) -> MatchConfig:
@@ -18,4 +19,5 @@ static func from_save(save: SaveData, level: int) -> MatchConfig:
 	c.aim_sens = save.aim_sens
 	c.left_handed = save.left_handed
 	c.vibration = save.vibration
+	c.serve_type = save.serve_type
 	return c

@@ -8,8 +8,10 @@ signal touch_made(player: Player, grade: String, quality: float)
 signal whiffed(player: Player, why: String)
 signal set_over(team: int, set_index: int, final: Vector2i)
 signal match_over(team: int)
+signal served(player: Player, serve_kind: int, grade: String)
 
-enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER }
+## SERVE_TOSS: bola lançada no saque flutuante/viagem, esperando o toque (Fase 2).
+enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER, SERVE_TOSS }
 enum Act { NONE, SERVE, RECEIVE, SET_BALL, ATTACK, FREEBALL }
 
 const ACT_LABELS := ["", "SACAR", "RECEBER", "LEVANTAR", "ATACAR", "PASSAR"]
@@ -41,6 +43,7 @@ var human_aiming := false
 ## A bola vai para onde ela está (os ímãs ajudam quando ela está perto de um alvo).
 var human_aim := Vector3.ZERO
 var aim_sens := 1.0                 # opção do jogador: multiplica Tuning.AIM_SENS
+var serve_type: Array[int] = [ServeType.Kind.UNDER, ServeType.Kind.UNDER]   # por time
 var _pause_t := 0.0
 var _next_server := 0
 var _set_break := false             # a pausa atual é de fim de set
@@ -122,7 +125,7 @@ func current_act(p: Player) -> int:
 		if p == server and ball.mode == Ball.Mode.HELD:
 			return Act.SERVE
 		return Act.NONE
-	if state != State.PLAY or plan == null or plan.player != p:
+	if not _in_rally() or plan == null or plan.player != p:
 		return Act.NONE
 	return plan.act
 
@@ -135,7 +138,14 @@ func action_label(p: Player) -> String:
 func is_hot(p: Player) -> bool:
 	if plan == null or current_act(p) == Act.NONE:
 		return false
-	return absf(time - plan.t) <= Tuning.GOOD
+	return absf(time - plan.t) <= Tuning.GOOD * window_scale()
+
+
+## Multiplicador da janela de timing do plano atual (a viagem tem janela menor).
+func window_scale() -> float:
+	if plan != null and plan.act == Act.SERVE:
+		return float(Tuning.SERVE_WINDOW[serve_type[plan.team]])
+	return 1.0
 
 
 func opponent_of(team: int) -> Player:
@@ -233,6 +243,7 @@ func clamp_aim(p: Player, a: Vector3) -> Vector3:
 func human_press(p: Player) -> void:
 	p.holding = true
 	human_aiming = true
+	start_serve(p)
 
 
 func human_drag(p: Player, rel: Vector2) -> void:
@@ -270,10 +281,11 @@ func attempt_hit(p: Player, aim: Vector3, power_cap: float = 1.0) -> void:
 	if p.swing_cd > 0.0:
 		return
 	if state == State.SERVE_WAIT:
-		if p == server and ball.mode == Ball.Mode.HELD:
-			_serve(p, aim)
+		# saque com lançamento: o toque vem depois, no anel (start_serve)
+		if p == server and ball.mode == Ball.Mode.HELD and not ServeType.is_tossed(serve_type[p.team]):
+			_serve(p, aim, Tuning.SERVE_Q_UNDER)
 		return
-	if state != State.PLAY or rally_over:
+	if not _in_rally() or rally_over:
 		return
 	if plan == null or plan.player != p:
 		_whiff(p, "SEM BOLA")
@@ -283,10 +295,11 @@ func attempt_hit(p: Player, aim: Vector3, power_cap: float = 1.0) -> void:
 			return
 	var t_ideal := plan.t
 	var err := time - t_ideal
-	if err < -Tuning.WINDOW_EARLY:
+	var w := window_scale()
+	if err < -Tuning.WINDOW_EARLY * w:
 		_whiff(p, "CEDO")
 		return
-	if err > Tuning.WINDOW_LATE:
+	if err > Tuning.WINDOW_LATE * w:
 		_whiff(p, "TARDE")
 		return
 	_pending.append({
@@ -309,7 +322,7 @@ func _run_pending() -> void:
 			due.append(item)
 	_pending = keep
 	for item in due:
-		if int(item["plan_id"]) != plan_id or state != State.PLAY or rally_over:
+		if int(item["plan_id"]) != plan_id or not _in_rally() or rally_over:
 			continue
 		_execute(item["player"], item["aim"], float(item["err"]), float(item["cap"]))
 
@@ -320,15 +333,19 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 		_whiff(p, "LONGE")
 		return
 	var a := absf(err)
+	var w := window_scale()
 	var q := 1.0
 	var grade := "PERFEITO!"
-	if a > Tuning.PERFECT:
-		if a <= Tuning.GOOD:
+	if a > Tuning.PERFECT * w:
+		if a <= Tuning.GOOD * w:
 			q = 0.7
 			grade = "BOM"
 		else:
 			q = 0.35
 			grade = "CEDO" if err < 0.0 else "TARDE"
+	if plan.act == Act.SERVE:
+		_serve(p, aim, q, grade)
+		return
 	var shot := resolver.resolve(self, p, plan.act, aim, q, cap)
 	ball.launch(shot.from, shot.vel, shot.grav)
 	p.lunge(shot.from)
@@ -344,16 +361,35 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 	_make_plan()
 
 
-func _serve(p: Player, aim: Vector3) -> void:
+## Aperto do sacador: no flutuante e na viagem lança a bola para cima e cria o plano
+## do saque (anel embaixo do sacador). Por baixo não faz nada: saca ao soltar.
+func start_serve(p: Player) -> void:
+	if state != State.SERVE_WAIT or p != server or ball.mode != Ball.Mode.HELD:
+		return
+	var kind := serve_type[p.team]
+	if not ServeType.is_tossed(kind):
+		return
 	var s := side_of_team(p.team)
-	var q := 0.85                      # Fase 0: saque sem timing (barra de força chega na Fase 2)
-	var snapped: Vector3 = snap_aim(p, aim)["pos"]
-	var target := _keep_side(resolver.scatter(snapped, Act.SERVE, q), -s, 0.8)
-	if p.is_human and q >= Tuning.ASSIST_KEEP_IN_Q:
-		target = keep_inside(target)
-	var from := p.position + Vector3(0.0, 1.05, -0.3 * s)
-	var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
-	ball.launch(from, BallSim.clear_net_velocity(from, to, Tuning.T_SERVE))
+	var hand := p.position + Vector3(0.0, Tuning.SERVE_HAND_H, -0.3 * s)
+	var up := sqrt(2.0 * Tuning.GRAVITY * float(Tuning.SERVE_TOSS_H[kind]))
+	ball.launch(hand, Vector3(0.0, up, 0.0))
+	state = State.SERVE_TOSS
+	plan_id += 1
+	var pred := ball.sim.predict()
+	land_point = pred["land"]
+	land_in = is_inside(land_point)
+	var hit := BallSim.find_descent(pred, float(Tuning.SERVE_CONTACT_H[kind]), s)
+	plan = ContactPlan.new(p.team, 0, Act.SERVE, time + float(hit["t"]), hit["pos"], p)
+
+
+func _serve(p: Player, aim: Vector3, q: float, grade: String = "SAQUE") -> void:
+	var s := side_of_team(p.team)
+	var kind := serve_type[p.team]
+	var from := ball.position
+	if ball.mode == Ball.Mode.HELD:
+		from = p.position + Vector3(0.0, float(Tuning.SERVE_CONTACT_H[kind]), -0.3 * s)
+	var shot := resolver.serve(self, p, kind, from, aim, q)
+	ball.launch(shot.from, shot.vel, shot.grav)
 	p.serving = false
 	state = State.PLAY
 	last_team = p.team
@@ -361,6 +397,7 @@ func _serve(p: Player, aim: Vector3) -> void:
 	rally_touches = 1
 	p.swing(Act.SERVE)
 	touch_made.emit(p, "SAQUE", q)
+	served.emit(p, kind, grade)
 	_make_plan()
 
 
@@ -458,7 +495,10 @@ func _high_set_point(team: int) -> Vector3:
 
 ## Pulo automático: segurando o botão no ataque, o jogador sobe na hora certa.
 func _auto_jumps() -> void:
-	if state != State.PLAY or plan == null or plan.act != Act.ATTACK:
+	if not _in_rally() or plan == null:
+		return
+	var jump_serve := plan.act == Act.SERVE and serve_type[plan.team] == ServeType.Kind.JUMP
+	if plan.act != Act.ATTACK and not jump_serve:
 		return
 	var t_ideal := plan.t
 	if time < t_ideal - Tuning.JUMP_TIME_UP or time > t_ideal + 0.1:
@@ -469,6 +509,11 @@ func _auto_jumps() -> void:
 		return
 	if Vector2(at.x - who.position.x, at.z - who.position.z).length() <= Tuning.REACH + 1.2:
 		who.start_jump(at)
+
+
+## Bola em jogo e tocável: rally ou bola lançada no saque.
+func _in_rally() -> bool:
+	return state == State.PLAY or state == State.SERVE_TOSS
 
 
 func _has_pending(p: Player) -> bool:
@@ -494,6 +539,9 @@ func _update_assists() -> void:
 func _on_ball_event(e: Dictionary) -> void:
 	var kind: int = e["type"]
 	var pos: Vector3 = e["pos"]
+	if state == State.SERVE_TOSS and kind == BallSim.Ev.LAND:
+		_award(1 - server_team, "Saque perdido")
+		return
 	if state != State.PLAY or rally_over:
 		return
 	if kind == BallSim.Ev.NET:

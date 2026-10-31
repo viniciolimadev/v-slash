@@ -359,3 +359,9 @@ Depois da fatia: rodar a simulação de equilíbrio (tabela do README em % de po
 | B-4 | Bloqueio não conta como toque (regra de quadra); no 2v2 da Fase 3 revisitar (na praia conta) | contar como toque |
 | B-5 | Tipo de saque lembrado no save | volta para POR BAIXO a cada partida |
 | B-6 | Assistência "bola boa fica dentro" não vale para VIAGEM | vale para todos |
+| B-7 | `HitResolver.resolve` devolve `HitResolver.Shot` (classe tipada), não `Dictionary` (regra de estilo: estrutura de domínio nova é `RefCounted`). O cálculo do saque também foi para o resolver (`serve`) | `Dictionary` como no esboço da seção 4.1 |
+| B-8 | POR BAIXO voa **1,45 s** (o saque da Fase 1), não 1,8 s: com 1,8 s a partida casual × Fácil foi para 8,9–9,2 min (RNF-2.03). FLUTUANTE 1,3 s, VIAGEM 1,05 s | 1,8 s e aceitar partida mais longa |
+| B-9 | A bola é lançada da mão a `SERVE_HAND_H` = 1,5 m: com a mão a 1,05 m o flutuante subiria só até 2,25 m e nunca desceria pelo contato (2,45 m) | contato mais baixo |
+| B-10 | A nota do saque com timing vai no sinal novo `served(player, kind, grade)`; `touch_made` continua com "SAQUE" (as estatísticas não contam saque como toque) | nota no `touch_made` |
+| B-11 | Viagem sem "passo à frente": só o pulo automático (o sacador fica preso atrás da linha) | animar o passo na Fase 4 |
+| B-12 | Fora do App (F6) o seletor de saque fica à esquerda do botão do nível do bot | só na partida do App |

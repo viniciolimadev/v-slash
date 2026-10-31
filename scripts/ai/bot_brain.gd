@@ -32,10 +32,12 @@ func tick(_dt: float) -> void:
 	var s := Game.side_of_team(p.team)
 	var home := Vector3(0.0, 0.0, s * 4.2)
 
-	if game.state == Game.State.SERVE_WAIT:
+	if game.state == Game.State.SERVE_WAIT or game.state == Game.State.SERVE_TOSS:
 		p.holding = false
 		if game.server != p:
 			_go_to(home)
+			return
+		if game.state == Game.State.SERVE_TOSS:
 			return
 		if _serve_at == INF:
 			_serve_at = game.time + rng.randf_range(0.8, 1.4)

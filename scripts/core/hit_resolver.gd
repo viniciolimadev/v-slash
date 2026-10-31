@@ -62,6 +62,31 @@ func resolve(game: Game, p: Player, act: int, aim: Vector3, q: float, cap: float
 	return shot
 
 
+## Saque do tipo `serve_kind` saindo de `from` (mão do sacador ou bola lançada).
+func serve(game: Game, p: Player, serve_kind: int, from: Vector3, aim: Vector3, q: float) -> Shot:
+	var s := Game.side_of_team(p.team)
+	var snapped: Vector3 = game.snap_aim(p, aim)["pos"]
+	var target := Game._keep_side(_scatter_by(snapped, float(Tuning.SERVE_SCATTER[serve_kind]), q), -s, 0.8)
+	var risky := serve_kind == ServeType.Kind.JUMP
+	# assistência "toque BOM fica dentro": não vale para a viagem (é o risco do saque forte)
+	if p.is_human and q >= Tuning.ASSIST_KEEP_IN_Q and not risky:
+		target = Game.keep_inside(target)
+	var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
+	var t := float(Tuning.SERVE_TIME[serve_kind])
+	var grav := float(Tuning.SERVE_GRAV[serve_kind])
+	var shot := Shot.new()
+	shot.from = from
+	shot.grav = grav
+	shot.kind = Game.Act.SERVE
+	shot.target = target
+	# viagem mal batida não ganha o ajuste de passar a rede: pode ir na rede
+	if risky and q < Tuning.ASSIST_KEEP_IN_Q:
+		shot.vel = BallSim.launch_velocity(from, to, t, grav)
+	else:
+		shot.vel = BallSim.clear_net_velocity(from, to, t, grav)
+	return shot
+
+
 ## Erro de mira pela qualidade: até base·(1 − q) metros, distribuído no disco.
 func scatter(target: Vector3, kind: int, q: float) -> Vector3:
 	var base := Tuning.SCATTER_RECEIVE
@@ -69,8 +94,10 @@ func scatter(target: Vector3, kind: int, q: float) -> Vector3:
 		base = Tuning.SCATTER_SET
 	elif kind == Game.Act.ATTACK or kind == Game.Act.FREEBALL:
 		base = Tuning.SCATTER_ATTACK
-	elif kind == Game.Act.SERVE:
-		base = Tuning.SCATTER_SERVE
+	return _scatter_by(target, base, q)
+
+
+func _scatter_by(target: Vector3, base: float, q: float) -> Vector3:
 	var r := base * (1.0 - q) * sqrt(rng.randf())
 	var ang := rng.randf() * TAU
 	return target + Vector3(cos(ang) * r, 0.0, sin(ang) * r)

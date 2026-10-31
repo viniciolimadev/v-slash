@@ -5,6 +5,7 @@ extends CanvasLayer
 signal reset_pressed
 signal level_pressed
 signal pause_pressed
+signal serve_type_chosen(kind: int)
 
 ## STANDALONE: main.tscn sozinha (Reiniciar + nível do bot). MATCH: partida do App (pausa).
 ## TUTORIAL: sem placar, só pausa.
@@ -19,6 +20,8 @@ var _message: Label
 var _level_btn: Button
 var _reset_btn: Button
 var _pause_btn: Button
+var _serve_box: HBoxContainer
+var _serve_btns: Array[Button] = []
 var _popup_tw: Tween
 var _msg_tw: Tween
 var _banner_tw: Tween
@@ -59,6 +62,29 @@ func _ready() -> void:
 	_level_btn.offset_bottom = 58.0
 	_level_btn.pressed.connect(func() -> void: level_pressed.emit())
 
+	# seletor do tipo de saque (topo direito, dentro da faixa que não conta como toque de jogo)
+	_serve_box = HBoxContainer.new()
+	_serve_box.add_theme_constant_override("separation", 6)
+	root.add_child(_serve_box)
+	_serve_box.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_serve_box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_serve_box.offset_top = 12.0
+	_serve_box.offset_bottom = 58.0
+	_place_serve_box(Mode.STANDALONE)
+	_serve_box.visible = false
+	var group := ButtonGroup.new()
+	for kind in ServeType.NAMES.size():
+		var b := Button.new()
+		b.text = str(ServeType.NAMES[kind])
+		b.focus_mode = Control.FOCUS_NONE
+		b.toggle_mode = true
+		b.button_group = group
+		b.add_theme_font_size_override("font_size", 18)
+		b.custom_minimum_size = Vector2(132.0, 46.0)
+		b.pressed.connect(func() -> void: serve_type_chosen.emit(kind))
+		_serve_box.add_child(b)
+		_serve_btns.append(b)
+
 
 func set_mode(mode: Mode) -> void:
 	_reset_btn.visible = mode == Mode.STANDALONE
@@ -66,6 +92,7 @@ func set_mode(mode: Mode) -> void:
 	_pause_btn.visible = mode != Mode.STANDALONE
 	_score.visible = mode != Mode.TUTORIAL
 	_rally.visible = mode != Mode.TUTORIAL
+	_place_serve_box(mode)
 	if mode != Mode.STANDALONE:
 		E2eHooks.publish("hud/pause", _pause_btn)
 
@@ -82,6 +109,16 @@ func set_board(rules: MatchRules, rally: int, best: int) -> void:
 func set_badge(text: String, color: Color) -> void:
 	_badge.text = text
 	_badge.modulate = color
+
+
+## Seletor de saque: aparece só antes do seu saque, com o tipo atual marcado.
+func show_serve_picker(on: bool, kind: int) -> void:
+	if on and not _serve_box.visible:
+		for i in _serve_btns.size():
+			E2eHooks.publish("hud/serve/%d" % i, _serve_btns[i])
+	_serve_box.visible = on
+	if on and not _serve_btns[kind].button_pressed:
+		_serve_btns[kind].set_pressed_no_signal(true)
 
 
 func set_level_name(level_text: String) -> void:
@@ -119,6 +156,12 @@ func banner(text: String, color: Color, secs: float) -> void:
 	_banner_tw = create_tween()
 	_banner_tw.tween_interval(secs)
 	_banner_tw.tween_property(_banner, "modulate:a", 0.0, 0.4)
+
+
+## Sozinha (F6) o botão do nível ocupa o canto: o seletor de saque fica à esquerda dele.
+func _place_serve_box(mode: Mode) -> void:
+	_serve_box.offset_right = -214.0 if mode == Mode.STANDALONE else -14.0
+	_serve_box.offset_left = _serve_box.offset_right
 
 
 func _make_label(parent: Control, font_size: int, top: float, height: float) -> Label:

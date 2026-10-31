@@ -68,7 +68,7 @@ func refresh() -> void:
 	_shadow.scale = Vector3(k, 1.0, k)
 
 	# ponto de queda (se ninguém tocar)
-	_land.visible = flying
+	_land.visible = flying and game.state != Game.State.SERVE_TOSS
 	_land.position = Vector3(game.land_point.x, 0.02, game.land_point.z)
 
 	# zona destacada (tutorial)
@@ -99,7 +99,7 @@ func refresh() -> void:
 			_approach.position = _ring.position
 			var sc := 1.0 + 2.2 * clampf(remaining / Tuning.RING_LEAD, 0.0, 1.0)
 			_approach.scale = Vector3(sc, 1.0, sc)
-			if absf(remaining) <= Tuning.PERFECT:
+			if absf(remaining) <= Tuning.PERFECT * game.window_scale():
 				_approach_mat.albedo_color = Color(0.3, 1.0, 0.4)
 			elif remaining < 0.0:
 				_approach_mat.albedo_color = Color(1.0, 0.35, 0.3)

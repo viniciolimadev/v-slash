@@ -34,6 +34,8 @@ func _run() -> void:
 	_test_contact_plan()
 	print("== HitResolver (mesmos números do código antigo) ==")
 	_test_hit_resolver()
+	print("== tipos de saque ==")
+	_test_serve_types()
 	print("== regras da partida (sets) ==")
 	_test_match_rules()
 	print("== partida completa bot x bot ==")
@@ -419,6 +421,125 @@ func _test_hit_resolver() -> void:
 		worst = maxf(worst, shot.vel.distance_to(c[6]))
 	_check(worst < 1e-4, "mesma semente = mesma saída da bola que a Fase 1 (diferença %.6f)" % worst)
 	_free_main(main)
+
+
+## Partida nova com você sacando o tipo `kind`. Para o flutuante/viagem, já aperta (lança a bola).
+func _serve_setup(kind: int, press: bool) -> Node:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	game.serve_type[human.team] = kind
+	game.tick(DT)
+	if press:
+		game.human_press(human)
+	return main
+
+
+## Solta o botão `err` segundos depois do tempo ideal do plano (relógio ajustado, sem esperar).
+func _release_at(game: Game, human: Player, err: float) -> Array:
+	var got := [""]
+	game.served.connect(func(_p: Player, _k: int, grade: String) -> void: got[0] = grade)
+	game.whiffed.connect(func(_p: Player, why: String) -> void: got[0] = "ERRO " + why)
+	while game.time < game.plan.t - 0.4:
+		game.tick(DT)
+	game.time = game.plan.t + err
+	game.human_release(human)
+	for _i in 30:
+		game.tick(DT)
+	return got
+
+
+func _test_serve_types() -> void:
+	var main := _serve_setup(ServeType.Kind.UNDER, true)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	_check(game.state == Game.State.SERVE_WAIT, "POR BAIXO: apertar não lança a bola")
+	game.human_release(human)
+	_check(game.state == Game.State.PLAY and game.last_team == human.team, "POR BAIXO: soltar saca direto")
+	_free_main(main)
+
+	main = _serve_setup(ServeType.Kind.FLOAT, true)
+	game = main.get("game")
+	human = main.get("human")
+	var plan: ContactPlan = game.plan
+	_check(game.state == Game.State.SERVE_TOSS and plan != null and plan.act == Game.Act.SERVE
+			and plan.player == human and plan.t > game.time + 0.3,
+			"FLUTUANTE: apertar lança a bola e cria o plano de saque")
+	_check(game.action_label(human) == "SACAR", "botão continua SACAR com a bola no ar")
+	var got := _release_at(game, human, 0.0)
+	_check(got[0] == "PERFEITO!" and game.state == Game.State.PLAY, "soltar no tempo ideal = saque PERFEITO (%s)" % got[0])
+	_free_main(main)
+
+	main = _serve_setup(ServeType.Kind.FLOAT, true)
+	game = main.get("game")
+	var point := [-1, ""]
+	game.point_scored.connect(func(team: int, why: String) -> void:
+		point[0] = team
+		point[1] = why)
+	for _i in int(3.0 / DT):
+		game.tick(DT)
+	_check(point[0] == 1 and point[1] == "Saque perdido", "bola lançada que cai = ponto do adversário (%s)" % point[1])
+	_free_main(main)
+
+	var grades := []
+	for kind in [ServeType.Kind.FLOAT, ServeType.Kind.JUMP]:
+		main = _serve_setup(kind, true)
+		grades.append(_release_at(main.get("game"), main.get("human"), -0.12)[0])
+		_free_main(main)
+	_check(grades == ["BOM", "CEDO"], "soltar 0,12 s antes: BOM no flutuante, CEDO na viagem (%s)" % [grades])
+
+	# nunca trava: cada tipo saca e a bola chega do outro lado
+	for kind in ServeType.NAMES.size():
+		main = _serve_setup(kind, true)
+		game = main.get("game")
+		human = main.get("human")
+		if ServeType.is_tossed(kind):
+			_release_at(game, human, 0.0)
+		else:
+			game.human_release(human)
+		var crossed := false
+		for _i in int(3.0 / DT):
+			game.tick(DT)
+			if game.ball.position.z < 0.0:
+				crossed = true
+		_check(crossed, "%s perfeito passa a rede" % ServeType.NAMES[kind])
+		_free_main(main)
+
+	# seletor no topo: aparece no seu saque, fica na faixa que não aciona o botão de ação
+	main = _serve_setup(ServeType.Kind.UNDER, false)
+	game = main.get("game")
+	human = main.get("human")
+	var hud: Hud = main.get("hud")
+	main.call("_process", DT)
+	var box := hud.get("_serve_box") as HBoxContainer
+	var btns: Array[Button] = hud.get("_serve_btns")
+	var r := box.get_global_rect()
+	var lvl := (hud.get("_level_btn") as Button).get_global_rect()
+	_check(box.visible and r.end.y <= TouchControls.TOP_BAR and r.size.x > 300.0 and not r.intersects(lvl),
+			"seletor de saque visível no topo, fora da área do botão de ação (%s)" % r)
+	btns[ServeType.Kind.FLOAT].pressed.emit()
+	_check(game.serve_type[human.team] == ServeType.Kind.FLOAT, "tocar em FLUTUANTE troca o seu tipo de saque")
+	game.human_press(human)
+	main.call("_process", DT)
+	_check(not box.visible and game.state == Game.State.SERVE_TOSS, "apertar lança a bola e esconde o seletor")
+	_free_main(main)
+
+	var path := "user://test_serve.cfg"
+	var sv := SaveData.new(path)
+	sv.serve_type = ServeType.Kind.JUMP
+	sv.save_file()
+	var back := SaveData.new(path)
+	back.load_file()
+	var v1 := ConfigFile.new()
+	v1.set_value("meta", "version", 1)
+	v1.set_value("options", "aim_sens", 1.2)
+	v1.save(path)
+	var old := SaveData.new(path)
+	old.load_file()
+	_check(back.serve_type == ServeType.Kind.JUMP and old.serve_type == ServeType.Kind.UNDER
+			and MatchConfig.from_save(back, 0).serve_type == ServeType.Kind.JUMP,
+			"tipo de saque salvo e recarregado; save versão 1 usa POR BAIXO")
+	DirAccess.remove_absolute(path)
 
 
 ## Joga pontos seguidos de um time.
