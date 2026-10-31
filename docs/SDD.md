@@ -423,3 +423,4 @@ Preset Android release com keystore em segredo do GitHub (`GODOT_ANDROID_KEYSTOR
 | DP-02 | Partida em **melhor de 3 sets de 15**, vantagem de 2 (`SET_POINTS = 15`, `SETS_TO_WIN = 2`). |
 | DP-03 | **Stamina** entra na Fase 2 atrás de `STAMINA_ENABLED`; só fica ligada se o teste no celular aprovar. |
 | DP-04 | **Multiplayer** (local e online) fora do escopo; reavaliar depois da Fase 5. |
+| DP-05 | Partida de **~8 min** contra o Fácil é aceita: meta de duração revista de 4–7 para **6–9 min** em média, sem mudar formato nem pausas. |

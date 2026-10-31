@@ -770,10 +770,8 @@ func _test_match_duration() -> void:
 	var avg := 0.0
 	for mm in minutes:
 		avg += mm / minutes.size()
-	# meta do SDD (RNF-1.01) é 4–7 min; medido 7,8 min com sets de 15 (decisão pendente com o dono).
-	# Este limite só protege contra regressão: partidas ficando bem mais longas que hoje.
-	print("  média %.1f min (meta 4–7 min)" % avg)
-	_check(avg <= 8.5, "partida casual x Fácil não fica mais longa que hoje (média %.1f min <= 8,5)" % avg)
+	# RNF-1.01 (DP-05): melhor de 3 sets de 15 dá ~6–7 min em 2 sets e ~9–11 min em 3 sets
+	_check(avg >= 6.0 and avg <= 9.0, "partida casual x Fácil dura 6–9 min em média (%.1f min)" % avg)
 
 
 func _drag_to(game: Game, human: Player, target: Vector3) -> void:

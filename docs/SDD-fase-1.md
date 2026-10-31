@@ -53,7 +53,7 @@ Complementa o [SDD geral](SDD.md) (seção 9.1) e o [ROADMAP](ROADMAP.md). Aqui 
 
 | ID | Requisito | Meta |
 |---|---|---|
-| RNF-1.01 | Duração de partida humana contra o Fácil | 4–7 min (medido pela simulação "humano casual"). **Medido: 7,8 min de média** (8 partidas; 2 sets ≈ 6–7 min, 3 sets ≈ 9–11 min). `POINT_PAUSE` 1,2 s baixa para 7,2. Decisão pendente com o dono; o teste guarda só contra regressão (≤ 8,5 min). |
+| RNF-1.01 | Duração de partida humana contra o Fácil | **6–9 min em média** (simulação "humano casual"). Era 4–7; medido 7,8 min (8 partidas; 2 sets ≈ 6–7 min, 3 sets ≈ 9–11 min) e o dono aceitou a duração (DP-05). |
 | RNF-1.02 | Troca de tela | < 300 ms; sem recarregar o motor |
 | RNF-1.03 | Save | nunca corrompe: grava em arquivo temporário e renomeia; arquivo ilegível = padrões, sem crash |
 | RNF-1.04 | Botões de tela | alvo de toque ≥ 64 px de altura em 720 p |
@@ -469,7 +469,7 @@ Novos grupos em `tests/run_tests.gd` (mesmo padrão `_check`). Nenhum teste da F
 | `_test_contact_plan` | 4º toque do mesmo lado não gera plano (forçando `touches = MAX_TOUCHES`); `plan` é `ContactPlan` ou `null` |
 | `_test_match_rules` | 15–13 fecha set; 15–14 não fecha; 16–14 fecha; 2 sets fecham a partida; 1–1 vai ao 3º; `first_server` = 0, 1, 0; set point / match point corretos em 14–13, 14–14, 1 set a 0; modo infinito nunca fecha |
 | `_test_match_flow` | bot × bot (Médio × Médio) com regras reais: emite `set_over` ≥ 2 vezes e `match_over` 1 vez; `state == MATCH_OVER` depois; nenhum `attempt_hit` aceito após o fim; duração impressa |
-| `_test_match_duration` | humano roteirizado "casual" (reação 0,4 s, erro 90 ms) × Fácil, 8 sementes fixas (bot incluso): imprime cada partida e a média; checa ≤ 8,5 min (regressão; meta 4–7 pendente) |
+| `_test_match_duration` | humano roteirizado "casual" (reação 0,4 s, erro 90 ms) × Fácil, 8 sementes fixas (bot incluso): imprime cada partida e a média; checa 6–9 min (RNF-1.01) |
 | `_test_stats` | contagens batem com os sinais emitidos num rally roteirizado; saque não conta como toque |
 | `_test_save` | ida e volta de todos os campos; arquivo ausente → padrões; arquivo lixo → padrões sem erro; valores fora do limite são cortados; vitória no Fácil libera Médio; vitória no Difícil mantém 2 |
 | `_test_pause` | `cancel_aim` ao pausar: soltar depois não gera toque; `get_tree().paused` congela `Game.time` |
@@ -492,7 +492,7 @@ Os toques do e2e acertam botões por coordenada proporcional à tela; as telas e
 
 1. Todos os testes (Fase 0 + Fase 1) e o e2e passam no CI.
 2. Partida bot × bot completa termina sozinha no headless.
-3. Simulação "humano casual × Fácil" dá partidas de 4–7 min; tabela de equilíbrio do README atualizada (agora em **% de partidas vencidas**, além de % de pontos).
+3. Simulação "humano casual × Fácil" dá partidas de 6–9 min em média; tabela de equilíbrio do README atualizada (agora em **% de partidas vencidas**, além de % de pontos).
 4. No celular (Galaxy): fluxo título → tutorial → partida → resultado → revanche sem travar; voltar do Android pausa; trocar de app pausa; fechar e abrir mantém o progresso.
 5. Na Web (Pages): progresso persiste ao recarregar a página.
 
