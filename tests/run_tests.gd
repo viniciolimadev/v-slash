@@ -32,6 +32,10 @@ func _run() -> void:
 	_test_aim_assist()
 	print("== plano de contato ==")
 	_test_contact_plan()
+	print("== regras da partida (sets) ==")
+	_test_match_rules()
+	print("== partida completa bot x bot ==")
+	_test_match_flow()
 	print("falhas: %d" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -149,7 +153,7 @@ func _test_bot_vs_bot() -> void:
 			long5 += 1
 	var count := maxi(rallies.size(), 1)
 	print("  pontos=%d  placar=%d x %d  média de toques=%.1f  rallies 5+=%.0f%%  maior tempo sem evento=%.1f s" % [
-			rallies.size(), game.score[0], game.score[1], float(total) / count,
+			rallies.size(), game.rules.points[0], game.rules.points[1], float(total) / count,
 			100.0 * long5 / count, float(stats["gap"])])
 	_check(rallies.size() > 40, "partida anda (pontos saem)")
 	_check(float(stats["gap"]) < 8.0, "nunca trava (sempre há toque ou ponto em < 8 s)")
@@ -209,7 +213,7 @@ func _test_scripted_human() -> void:
 	var touches := int(stats["touches"])
 	print("  toques=%d  perfeitos=%d  erros=%d  pontos=%d  placar=%d x %d" % [
 			touches, int(stats["perfect"]), int(stats["whiffs"]), int(stats["points"]),
-			game.score[0], game.score[1]])
+			game.rules.points[0], game.rules.points[1]])
 	_check(touches > 50, "humano consegue tocar na bola")
 	_check(int(stats["perfect"]) >= touches * 0.8, "soltar no anel fechado = PERFEITO")
 	_check(int(stats["points"]) > 10, "pontos saem com o humano jogando")
@@ -366,6 +370,82 @@ func _test_contact_plan() -> void:
 	game.touches = Tuning.MAX_TOUCHES
 	game._make_plan()
 	_check(game.plan == null, "toque além de MAX_TOUCHES não gera plano (a bola cai)")
+	_free_main(main)
+
+
+## Joga pontos seguidos de um time.
+func _points(r: MatchRules, team: int, n: int) -> Dictionary:
+	var last := {}
+	for _i in n:
+		last = r.add_point(team)
+	return last
+
+
+func _test_match_rules() -> void:
+	var r := MatchRules.new(15, 2, 2)
+	_points(r, 1, 13)
+	var res := _points(r, 0, 15)
+	_check(bool(res["set_over"]) and r.sets[0] == 1 and r.history[0] == Vector2i(15, 13), "15–13 fecha o set")
+	r = MatchRules.new(15, 2, 2)
+	_points(r, 0, 14)
+	_points(r, 1, 13)
+	_check(r.is_set_point(0) and not r.is_set_point(1), "14–13: set point de quem está na frente")
+	_check(not r.is_match_point(0), "set point no 1º set não é match point")
+	_points(r, 1, 1)
+	_check(not r.is_set_point(0) and not r.is_set_point(1), "14–14: ninguém tem set point")
+	res = _points(r, 0, 1)
+	_check(not bool(res["set_over"]), "15–14 não fecha o set")
+	res = _points(r, 0, 1)
+	_check(bool(res["set_over"]) and r.history[0] == Vector2i(16, 14), "16–14 fecha o set")
+	_check(not r.is_set_point(0) and not r.is_match_point(0), "entre um set e outro não há selo de set/match point")
+	r.start_next_set()
+	_check(r.points == [0, 0] and r.set_index == 1, "set seguinte começa zerado")
+	_points(r, 0, 14)
+	_check(r.is_match_point(0), "1 set a 0 e 14–0: match point")
+	_points(r, 1, 16)
+	_check(r.sets == [1, 1] and r.winner == -1, "1–1 vai para o 3º set")
+	r.start_next_set()
+	res = _points(r, 1, 15)
+	_check(bool(res["match_over"]) and r.winner == 1, "2 sets fecham a partida")
+	res = r.add_point(0)
+	_check(not bool(res["set_over"]) and r.points[0] == 0, "depois do fim, ponto não conta")
+	_check([r.first_server(0), r.first_server(1), r.first_server(2)] == [0, 1, 0],
+			"1º saque alterna por set: você, adversário, você")
+	var endless := MatchRules.new(0)
+	res = _points(endless, 0, 100)
+	_check(not bool(res["set_over"]) and not endless.is_set_point(0) and endless.points[0] == 100,
+			"modo infinito nunca fecha set")
+
+
+func _test_match_flow() -> void:
+	var main := _make_main(true)
+	var game: Game = main.get("game")
+	game.set_bot_level(1)
+	game.rules = MatchRules.new()
+	game.reset_match()
+	var seen := {"sets": 0, "matches": 0, "touch_after": 0, "server_ok": true, "check_server": false}
+	game.set_over.connect(func(_t: int, _i: int, _f: Vector2i) -> void:
+		seen["sets"] += 1
+		seen["check_server"] = true)
+	game.match_over.connect(func(_t: int) -> void: seen["matches"] += 1)
+	var t0 := game.time
+	while game.state != Game.State.MATCH_OVER and game.time - t0 < 3600.0:
+		game.tick(DT)
+		# 1º saque de cada set novo: alterna
+		if seen["check_server"] and game.state == Game.State.SERVE_WAIT:
+			seen["check_server"] = false
+			if game.server_team != game.rules.first_server(game.rules.set_index):
+				seen["server_ok"] = false
+	var minutes := (game.time - t0) / 60.0
+	print("  sets=%s  placares=%s  duração=%.1f min" % [game.rules.sets, game.rules.history, minutes])
+	_check(game.state == Game.State.MATCH_OVER and int(seen["matches"]) == 1, "partida bot x bot termina")
+	_check(int(seen["sets"]) == game.rules.history.size() and int(seen["sets"]) >= 2, "um set_over por set (%d)" % seen["sets"])
+	_check(bool(seen["server_ok"]), "1º saque de cada set segue a alternância")
+	game.touch_made.connect(func(_p: Player, _g: String, _q: float) -> void: seen["touch_after"] += 1)
+	for _i in int(10.0 / DT):
+		game.tick(DT)
+	_check(int(seen["touch_after"]) == 0 and game.state == Game.State.MATCH_OVER,
+			"depois do fim ninguém saca nem toca")
 	_free_main(main)
 
 

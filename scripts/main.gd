@@ -35,7 +35,8 @@ func _process(_delta: float) -> void:
 	controls.action_label = game.action_label(human)
 	controls.action_hot = game.is_hot(human)
 	controls.queue_redraw()
-	hud.set_board(game.score, game.rally_touches, game.best_rally)
+	hud.set_board(game.rules, game.rally_touches, game.best_rally)
+	_update_badge()
 
 
 func _build_world() -> void:
@@ -105,6 +106,8 @@ func _build_ui() -> void:
 	game.touch_made.connect(_on_touch)
 	game.whiffed.connect(_on_whiff)
 	game.point_scored.connect(_on_point)
+	game.set_over.connect(_on_set_over)
+	game.match_over.connect(_on_match_over)
 
 
 func _setup_input() -> void:
@@ -141,6 +144,7 @@ func _on_aim_dragged(rel: Vector2) -> void:
 
 func _on_reset() -> void:
 	game.reset_match()
+	hud.banner("", Color.WHITE, 0.0)
 
 
 func _on_level() -> void:
@@ -167,3 +171,31 @@ func _on_point(team: int, reason: String) -> void:
 		hud.message("Ponto seu! " + reason, Color(0.55, 1.0, 0.65))
 	else:
 		hud.message("Ponto do bot. " + reason, Color(1.0, 0.62, 0.52))
+
+
+func _on_set_over(team: int, set_index: int, final: Vector2i) -> void:
+	if game.rules.winner >= 0:
+		return              # último set: a faixa de fim de partida cobre
+	hud.banner("Fim do %dº set — %d × %d" % [set_index + 1, final.x, final.y],
+			_team_color(team), Tuning.SET_PAUSE)
+
+
+func _on_match_over(team: int) -> void:
+	var text := "VOCÊ VENCEU!" if team == human.team else "O BOT VENCEU"
+	hud.banner(text, _team_color(team), 3600.0)
+
+
+func _update_badge() -> void:
+	var rules := game.rules
+	for team in [0, 1]:
+		if rules.is_match_point(team):
+			hud.set_badge("MATCH POINT", _team_color(team))
+			return
+		if rules.is_set_point(team):
+			hud.set_badge("SET POINT", _team_color(team))
+			return
+	hud.set_badge("", Color.WHITE)
+
+
+func _team_color(team: int) -> Color:
+	return (HOME_COLOR if team == 0 else AWAY_COLOR).lightened(0.35)
