@@ -49,7 +49,8 @@ func resolve(game: Game, p: Player, act: int, aim: Vector3, q: float, cap: float
 	elif kind == Game.Act.ATTACK:
 		var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
 		var dist := Vector2(to.x - from.x, to.z - from.z).length()
-		var spd := lerpf(Tuning.ATTACK_SPEED_MIN, Tuning.ATTACK_SPEED_MAX, power)
+		var top := Tuning.ATTACK_SPEED_MAX * (Tuning.TIRED_ATTACK if p.is_tired() else 1.0)
+		var spd := lerpf(Tuning.ATTACK_SPEED_MIN, top, power)
 		grav = Tuning.SPIKE_GRAVITY
 		v = BallSim.clear_net_velocity(from, to, maxf(dist / spd, 0.25), grav)
 	elif kind == Game.Act.DINK:

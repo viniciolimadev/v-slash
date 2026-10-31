@@ -55,6 +55,7 @@ var human_aiming := false
 var human_aim := Vector3.ZERO
 var aim_sens := 1.0                 # opção do jogador: multiplica Tuning.AIM_SENS
 var serve_type: Array[int] = [ServeType.Kind.UNDER, ServeType.Kind.UNDER]   # por time
+var stamina_on := Tuning.STAMINA_ENABLED      # ver set_stamina()
 var _pause_t := 0.0
 var _next_server := 0
 var _set_break := false             # a pausa atual é de fim de set
@@ -71,7 +72,16 @@ func setup(p_ball: Ball, p_players: Array[Player], p_bots: Array[BotBrain]) -> v
 			# começa no fundo da quadra adversária
 			human_aim = Vector3(0.0, 0.0, -side_of_team(p.team) * Tuning.AIM_DEEP)
 	rng.randomize()
+	set_stamina(stamina_on)
 	_reset_for_serve(0)
+
+
+## Liga/desliga a stamina (experimento): a barra de todos volta a cheia.
+func set_stamina(on: bool) -> void:
+	stamina_on = on
+	for p in players:
+		p.stamina_on = on
+		p.stamina = 1.0
 
 
 func reset_match() -> void:
@@ -100,6 +110,8 @@ func tick(dt: float) -> void:
 		b.tick(dt)
 	for p in players:
 		p.look_target = ball.position
+		if state == State.PLAY:
+			p.recover(Tuning.STAMINA_REGEN * dt)
 		p.step(dt)
 	_auto_jumps()
 	_update_block_plan()
@@ -433,12 +445,15 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 		return
 	if dive:
 		q = minf(q, Tuning.DIVE_Q_MAX)
+		p.spend(Tuning.STAMINA_COST_DIVE)
 		action_used.emit(p, Act.DIVE)
 	var act := plan.act
 	if act == Act.ATTACK and is_dink(p, aim):
 		act = Act.DINK
 		action_used.emit(p, Act.DINK)
 	var shot := resolver.resolve(self, p, act, aim, q, cap)
+	if act == Act.ATTACK:
+		p.spend(Tuning.STAMINA_COST_ATTACK * minf(q, cap))
 	_launch(shot)
 	if dive:
 		p.dive(shot.from)
@@ -485,6 +500,8 @@ func _serve(p: Player, aim: Vector3, q: float, grade: String = "SAQUE") -> void:
 	if ball.mode == Ball.Mode.HELD:
 		from = p.position + Vector3(0.0, float(Tuning.SERVE_CONTACT_H[kind]), -0.3 * s)
 	var shot := resolver.serve(self, p, kind, from, aim, q)
+	if kind == ServeType.Kind.JUMP:
+		p.spend(Tuning.STAMINA_COST_JUMP_SERVE)
 	_launch(shot)
 	p.serving = false
 	state = State.PLAY
@@ -567,7 +584,8 @@ func _start_block(p: Player) -> void:
 	if not p.is_grounded():
 		return
 	p.start_jump(p.position)
-	var bk := Block.new(p, time, Tuning.JUMP_HEIGHT)
+	var bk := Block.new(p, time, p.jump_height())
+	p.spend(Tuning.STAMINA_COST_BLOCK)
 	blocks.append(bk)
 	p.swing_cd = Tuning.JUMP_TIME_UP * 2.0 + Tuning.BLOCK_RECOVER
 	p.swing(Act.BLOCK)
@@ -780,6 +798,8 @@ func _award(team: int, reason: String) -> void:
 	human_aiming = false
 	for p in players:
 		p.holding = false
+	for p in players:
+		p.recover(Tuning.STAMINA_POINT_BONUS)
 	var r := rules.add_point(team)
 	if bool(r["match_over"]):
 		state = State.MATCH_OVER        # fim: ninguém saca mais

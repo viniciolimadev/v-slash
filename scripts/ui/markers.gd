@@ -19,6 +19,7 @@ var _hl_dot: MeshInstance3D
 var _hl_label: Label3D
 var _hl_name := ""
 var _block_shadow: MeshInstance3D
+var _stamina_bars: Array[MeshInstance3D] = []
 
 
 func setup(g: Game, h: Player) -> void:
@@ -52,6 +53,14 @@ func setup(g: Game, h: Player) -> void:
 	_block_shadow.mesh = strip
 	_block_shadow.material_override = _flat(Color(0.1, 0.0, 0.25, 0.35))
 	add_child(_block_shadow)
+	for _p in game.players:
+		var bar := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.7, 0.07, 0.02)
+		bar.mesh = bm
+		bar.material_override = _flat(Color(0.3, 1.0, 0.4))
+		add_child(bar)
+		_stamina_bars.append(bar)
 	_hl_label = _label(56)
 	_hl_label.pixel_size = 0.011
 	_hl_label.modulate = Color(0.4, 1.0, 0.5)
@@ -118,6 +127,7 @@ func refresh() -> void:
 				_approach_mat.albedo_color = Color(1.0, 1.0, 1.0, 0.9)
 
 	_update_block_shadow(act)
+	_update_stamina_bars()
 
 	# mira (sempre visível; fica onde você deixou por último)
 	var aim := game.human_aim_view()
@@ -172,6 +182,21 @@ func _update_block_shadow(act: int) -> void:
 	_block_shadow.position = Vector3(mid.x, 0.02, mid.z)
 	_block_shadow.rotation = Vector3(0.0, atan2(dir.x, dir.z), 0.0)
 	_block_shadow.scale = Vector3(1.0, 1.0, length)
+
+
+## Barra fina sobre cada jogador (só com a stamina ligada); vermelha quando cansado.
+func _update_stamina_bars() -> void:
+	for i in _stamina_bars.size():
+		var bar := _stamina_bars[i]
+		var p := game.players[i]
+		bar.visible = game.stamina_on
+		if not bar.visible:
+			continue
+		var k := maxf(p.stamina, 0.02)
+		bar.position = p.position + Vector3(0.35 * (k - 1.0), 2.25, 0.0)
+		bar.scale = Vector3(k, 1.0, 1.0)
+		(bar.material_override as StandardMaterial3D).albedo_color = \
+				Color(1.0, 0.3, 0.25) if p.is_tired() else Color(0.3, 1.0, 0.4)
 
 
 func _act_color(act: int) -> Color:

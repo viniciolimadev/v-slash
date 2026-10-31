@@ -375,3 +375,4 @@ Depois da fatia: rodar a simulação de equilíbrio (tabela do README em % de po
 | B-20 | A largada é garantida pela **altura ao cruzar as mãos e a rede** (≥ `NET_HEIGHT + BLOCK_REACH + DINK_APEX_MARGIN`), não pelo ápice: com ápice alto mas antes da rede a bola já descia e batia no bloqueio | ápice, como o esboço |
 | B-21 | O peixinho vale para quem tem `Player.can_dive` (humano sempre; bot a partir do Médio): sem atalho de regra, é um atributo do jogador como a velocidade | parâmetro no `attempt_hit` |
 | B-22 | Ímãs e limites da mira usam a ação do plano durante o PEIXINHO (`Game.aim_act`): a recepção de peixinho continua grudando no levantador | ímãs próprios do peixinho |
+| B-23 | A flag é a constante `Tuning.STAMINA_ENABLED`, copiada para `Game.stamina_on` (os testes ligam com `set_stamina(true)`); a recuperação em jogo só corre com a bola em jogo (`PLAY`) | flag só em `Tuning` |

@@ -44,6 +44,8 @@ func _run() -> void:
 	_test_dink()
 	print("== peixinho ==")
 	_test_dive()
+	print("== stamina (experimento) ==")
+	_test_stamina()
 	print("== regras da partida (sets) ==")
 	_test_match_rules()
 	print("== partida completa bot x bot ==")
@@ -772,7 +774,8 @@ func _touch_at_gap(game: Game, human: Player, act: int, gap: float) -> Dictionar
 	game.touch_made.connect(on_touch)
 	game.whiffed.connect(on_whiff)
 	game.action_used.connect(on_used)
-	game._execute(human, Vector3(0.8, 0.0, 1.6), 0.0, 1.0)
+	var aim := Vector3(0.0, 0.0, -5.0) if act == Game.Act.ATTACK else Vector3(0.8, 0.0, 1.6)
+	game._execute(human, aim, 0.0, 1.0)
 	game.touch_made.disconnect(on_touch)
 	game.whiffed.disconnect(on_whiff)
 	game.action_used.disconnect(on_used)
@@ -814,6 +817,63 @@ func _test_dive() -> void:
 	human.can_dive = false
 	got = _touch_at_gap(game, human, Game.Act.RECEIVE, 2.0)
 	_check(str(got["why"]) == "LONGE", "sem peixinho (bot no Fácil): LONGE")
+	_free_main(main)
+
+
+func _test_stamina() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var foe: Player = main.get("foe")
+	_check(not Tuning.STAMINA_ENABLED and not game.stamina_on and not human.stamina_on,
+			"stamina desligada por padrão (DP-03)")
+	_touch_at_gap(game, human, Game.Act.ATTACK, 0.5)
+	_touch_at_gap(game, human, Game.Act.RECEIVE, 2.0)
+	_check(human.stamina == 1.0 and not human.is_tired() and is_equal_approx(human.jump_height(), Tuning.JUMP_HEIGHT),
+			"desligada: cortada e peixinho não gastam nada")
+
+	game.set_stamina(true)
+	_touch_at_gap(game, human, Game.Act.ATTACK, 0.5)
+	_check(is_equal_approx(human.stamina, 1.0 - Tuning.STAMINA_COST_ATTACK), "cortada perfeita gasta %.2f" % Tuning.STAMINA_COST_ATTACK)
+	_touch_at_gap(game, human, Game.Act.RECEIVE, 2.0)
+	_check(is_equal_approx(human.stamina, 1.0 - Tuning.STAMINA_COST_ATTACK - Tuning.STAMINA_COST_DIVE),
+			"peixinho gasta %.2f" % Tuning.STAMINA_COST_DIVE)
+	human.stamina = 0.2
+	_check(human.is_tired() and is_equal_approx(human.jump_height(), Tuning.JUMP_HEIGHT * Tuning.TIRED_JUMP),
+			"abaixo de %.1f: cansado, pula menos" % Tuning.STAMINA_TIRED)
+	# cansado corre menos: mesma entrada por 1 s
+	human.reset_state()
+	human.position = Vector3(0.0, 0.0, 4.0)
+	human.move_input = Vector2(1.0, 0.0)
+	for _i in int(1.0 / DT):
+		human.step(DT)
+	var tired_x := human.position.x
+	human.stamina = 1.0
+	human.reset_state()
+	human.position = Vector3(-3.0, 0.0, 4.0)
+	human.move_input = Vector2(1.0, 0.0)
+	for _i in int(1.0 / DT):
+		human.step(DT)
+	human.move_input = Vector2.ZERO
+	_check(tired_x < (human.position.x + 3.0) * 0.9, "cansado anda mais devagar (%.2f × %.2f m)" % [tired_x, human.position.x + 3.0])
+	# cansado corta mais devagar
+	var speeds := []
+	for st: float in [1.0, 0.1]:
+		human.stamina = st
+		_touch_at_gap(game, human, Game.Act.ATTACK, 0.5)
+		speeds.append(Vector2(game.ball.sim.vel.x, game.ball.sim.vel.z).length())
+	_check(speeds[1] < speeds[0], "cansado corta mais devagar (%.1f × %.1f m/s)" % speeds)
+	# recupera: com a bola em jogo e a cada ponto
+	human.stamina = 0.2
+	game.state = Game.State.PLAY
+	game.ball.launch(Vector3(0.0, 9.0, 3.0), Vector3(0.0, 0.0, 0.0))
+	for _i in int(1.0 / DT):
+		game.tick(DT)
+	var after_play := human.stamina
+	game._award(foe.team, "Teste")
+	_check(after_play > 0.2 + Tuning.STAMINA_REGEN * 0.9 and
+			is_equal_approx(human.stamina, minf(after_play + Tuning.STAMINA_POINT_BONUS, 1.0)),
+			"recupera em jogo e a cada ponto (%.2f → %.2f)" % [after_play, human.stamina])
 	_free_main(main)
 
 

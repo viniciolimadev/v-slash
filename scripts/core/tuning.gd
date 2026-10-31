@@ -97,6 +97,19 @@ const JUMP_DRIFT := 2.5            # m/s de correção no ar (assistência)
 const MAGNET_RADIUS := 0.7         # assistência: puxa p/ o anel se você largar o joystick perto
 const MAGNET_SPEED := 2.2
 
+# --- Stamina (experimento, DP-03: só fica ligada se o teste no celular aprovar) ---
+const STAMINA_ENABLED := false
+const STAMINA_COST_JUMP_SERVE := 0.15   # fração da barra por saque viagem
+const STAMINA_COST_ATTACK := 0.08       # por cortada, vezes a força (0..1)
+const STAMINA_COST_BLOCK := 0.05        # por pulo de bloqueio
+const STAMINA_COST_DIVE := 0.2          # por peixinho
+const STAMINA_REGEN := 0.04             # por segundo com a bola em jogo
+const STAMINA_POINT_BONUS := 0.25       # recupera a cada ponto
+const STAMINA_TIRED := 0.3              # abaixo disto o jogador está cansado
+const TIRED_SPEED := 0.85               # cansado: multiplica a velocidade
+const TIRED_JUMP := 0.8                 # cansado: multiplica JUMP_HEIGHT
+const TIRED_ATTACK := 0.9               # cansado: multiplica ATTACK_SPEED_MAX
+
 # --- Mira ---
 const AIM_SENS := 0.028            # metros por pixel arrastado
 const AIM_DEEP := 5.5              # posição inicial da mira de saque/ataque: fundo da quadra adversária (m da rede)

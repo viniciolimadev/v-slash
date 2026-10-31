@@ -15,6 +15,8 @@ var vel := Vector3.ZERO
 var swing_cd := 0.0
 var can_dive := true                # o bot no Fácil não faz peixinho
 var diving_t := 0.0                 # s que ainda faltam no chão depois do peixinho
+var stamina := 1.0                  # 0..1; só vale com Game.stamina_on (Tuning.STAMINA_ENABLED)
+var stamina_on := false
 
 var _jump_t := -1.0
 var _jump_target := Vector3.ZERO
@@ -87,7 +89,7 @@ func step(dt: float) -> void:
 		var wish := Vector3(move_input.x, 0.0, move_input.y)
 		if wish.length() > 1.0:
 			wish = wish.normalized()
-		var desired := wish * speed
+		var desired := wish * speed * (Tuning.TIRED_SPEED if is_tired() else 1.0)
 		if magnet_on and wish.length() < 0.1:
 			var to_m := magnet_point - position
 			to_m.y = 0.0
@@ -141,6 +143,26 @@ func _dive_tilt() -> float:
 	return minf(clampf(elapsed / 0.12, 0.0, 1.0), clampf(diving_t / 0.3, 0.0, 1.0))
 
 
+func is_tired() -> bool:
+	return stamina_on and stamina < Tuning.STAMINA_TIRED
+
+
+## Altura do pulo agora (cansado pula menos; o bloqueio usa a mesma conta).
+func jump_height() -> float:
+	return Tuning.JUMP_HEIGHT * (Tuning.TIRED_JUMP if is_tired() else 1.0)
+
+
+## Gasta stamina (sem stamina a ação sai mesmo assim, só que "cansada").
+func spend(cost: float) -> void:
+	if stamina_on:
+		stamina = maxf(stamina - cost, 0.0)
+
+
+func recover(amount: float) -> void:
+	if stamina_on:
+		stamina = minf(stamina + amount, 1.0)
+
+
 func is_grounded() -> bool:
 	return _jump_t < 0.0
 
@@ -192,7 +214,7 @@ func _jump_offset() -> float:
 	if _jump_t < 0.0:
 		return 0.0
 	var u := clampf(_jump_t / (Tuning.JUMP_TIME_UP * 2.0), 0.0, 1.0)
-	return 4.0 * Tuning.JUMP_HEIGHT * u * (1.0 - u)
+	return 4.0 * jump_height() * u * (1.0 - u)
 
 
 func _add_mesh(parent: Node3D, mesh: Mesh, pos: Vector3, color: Color) -> MeshInstance3D:
