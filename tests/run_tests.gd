@@ -30,6 +30,8 @@ func _run() -> void:
 	_test_aim()
 	print("== assistência de mira ==")
 	_test_aim_assist()
+	print("== plano de contato ==")
+	_test_contact_plan()
 	print("falhas: %d" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -185,11 +187,11 @@ func _test_scripted_human() -> void:
 				pressed = false
 				serve_timer = 0.0
 		elif act != Game.Act.NONE:
-			var at: Vector3 = game.plan["pos"]
+			var at := game.plan.pos
 			var to := Vector2(at.x - human.position.x, at.z - human.position.z)
 			if to.length() > 0.1:
 				human.move_input = to.normalized() * clampf(to.length() / 0.5, 0.0, 1.0)
-			var t_ideal: float = game.plan["t"]
+			var t_ideal := game.plan.t
 			if not pressed and game.time >= t_ideal - 0.5:
 				game.human_press(human)
 				# como uma pessoa: olha onde a mira está e arrasta até o alvo (a mira persiste)
@@ -322,7 +324,7 @@ func _test_aim_assist() -> void:
 	game.human_release(human)
 	# recepção gruda no levantador
 	var spot := Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s)
-	game.plan = {"player": human, "act": Game.Act.RECEIVE, "t": game.time, "pos": human.position}
+	game.plan = ContactPlan.new(human.team, 1, Game.Act.RECEIVE, game.time, human.position, human)
 	game.state = Game.State.PLAY
 	var info := game.snap_aim(human, spot + Vector3(1.0, 0.0, 0.8))
 	_check(str(info["name"]) == "LEVANTADOR", "ímã de recepção: gruda no levantador")
@@ -347,6 +349,24 @@ func _drag(index: int, pos: Vector2) -> InputEventScreenDrag:
 	e.index = index
 	e.position = pos
 	return e
+
+
+func _test_contact_plan() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	# bola subindo e caindo do seu lado, depois de toques do seu time
+	game.state = Game.State.PLAY
+	game.ball.launch(Vector3(0.0, 2.0, 3.0), Vector3(0.0, 5.0, 0.0))
+	game.last_team = human.team
+	game.touches = Tuning.MAX_TOUCHES - 1
+	game._make_plan()
+	_check(game.plan is ContactPlan and game.plan.n == Tuning.MAX_TOUCHES and game.plan.player == human,
+			"último toque permitido gera plano para você")
+	game.touches = Tuning.MAX_TOUCHES
+	game._make_plan()
+	_check(game.plan == null, "toque além de MAX_TOUCHES não gera plano (a bola cai)")
+	_free_main(main)
 
 
 func _make_main(autoplay: bool) -> Node:

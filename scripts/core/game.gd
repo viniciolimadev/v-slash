@@ -26,7 +26,7 @@ var touches := 0                    # toques seguidos do last_team
 var rally_touches := 0
 var best_rally := 0
 var rally_over := false
-var plan: Dictionary = {}           # {team, n, act, t, pos, player} — ver _make_plan()
+var plan: ContactPlan = null        # ver _make_plan()
 var plan_id := 0
 var land_point := Vector3.ZERO      # onde a bola cai se ninguém tocar
 var land_in := true
@@ -112,9 +112,9 @@ func current_act(p: Player) -> int:
 		if p == server and ball.mode == Ball.Mode.HELD:
 			return Act.SERVE
 		return Act.NONE
-	if state != State.PLAY or plan.is_empty() or plan["player"] != p:
+	if state != State.PLAY or plan == null or plan.player != p:
 		return Act.NONE
-	return int(plan["act"])
+	return plan.act
 
 
 func action_label(p: Player) -> String:
@@ -123,9 +123,9 @@ func action_label(p: Player) -> String:
 
 ## Está na hora de soltar? (o botão acende)
 func is_hot(p: Player) -> bool:
-	if plan.is_empty() or current_act(p) == Act.NONE:
+	if plan == null or current_act(p) == Act.NONE:
 		return false
-	return absf(time - float(plan["t"])) <= Tuning.GOOD
+	return absf(time - plan.t) <= Tuning.GOOD
 
 
 func opponent_of(team: int) -> Player:
@@ -258,13 +258,13 @@ func attempt_hit(p: Player, aim: Vector3, power_cap: float = 1.0) -> void:
 		return
 	if state != State.PLAY or rally_over:
 		return
-	if plan.is_empty() or plan["player"] != p:
+	if plan == null or plan.player != p:
 		_whiff(p, "SEM BOLA")
 		return
 	for item in _pending:
 		if item["player"] == p:
 			return
-	var t_ideal: float = plan["t"]
+	var t_ideal := plan.t
 	var err := time - t_ideal
 	if err < -Tuning.WINDOW_EARLY:
 		_whiff(p, "CEDO")
@@ -276,8 +276,8 @@ func attempt_hit(p: Player, aim: Vector3, power_cap: float = 1.0) -> void:
 		"player": p, "aim": aim, "err": err, "cap": power_cap,
 		"at": maxf(time, t_ideal - Tuning.EARLY_SNAP), "plan_id": plan_id,
 	})
-	if int(plan["act"]) == Act.ATTACK and p.is_grounded():
-		p.start_jump(plan["pos"])
+	if plan.act == Act.ATTACK and p.is_grounded():
+		p.start_jump(plan.pos)
 
 
 func _run_pending() -> void:
@@ -313,7 +313,7 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 			q = 0.35
 			grade = "CEDO" if err < 0.0 else "TARDE"
 	var power := minf(q, cap)          # timing = precisão; o bot só limita a FORÇA
-	var act := int(plan["act"])
+	var act := plan.act
 	var info := snap_aim(p, aim)
 	var target: Vector3 = info["pos"]
 	var s := side_of_team(p.team)
@@ -413,7 +413,7 @@ static func _keep_side(v: Vector3, s: float, min_dist: float) -> Vector3:
 ## Prevê a bola e decide: quem toca, qual ação, onde fica o anel e o tempo ideal.
 func _make_plan() -> void:
 	plan_id += 1
-	plan = {}
+	plan = null
 	if ball.mode != Ball.Mode.FLYING:
 		return
 	var pred := ball.sim.predict()
@@ -422,8 +422,8 @@ func _make_plan() -> void:
 	var recv_side := side_of_point(land_point)
 	var recv_team := 0 if recv_side > 0.0 else 1
 	var n := 1 if recv_team != last_team else touches + 1
-	if n > 3:
-		return              # 4º toque não existe: a bola vai cair
+	if n > Tuning.MAX_TOUCHES:
+		return              # toque além do limite não existe: a bola vai cair
 	var options: Array = []
 	if n == 1:
 		options = [[Act.RECEIVE, Tuning.H_RECEIVE]]
@@ -436,14 +436,8 @@ func _make_plan() -> void:
 		if hit.is_empty():
 			continue
 		var at: Vector3 = hit["pos"]
-		plan = {
-			"team": recv_team,
-			"n": n,
-			"act": int(opt[0]),
-			"t": time + float(hit["t"]),
-			"pos": at,
-			"player": _closest_player(recv_team, at),
-		}
+		plan = ContactPlan.new(recv_team, n, int(opt[0]), time + float(hit["t"]), at,
+				_closest_player(recv_team, at))
 		return
 
 
@@ -463,20 +457,20 @@ func _closest_player(team: int, at: Vector3) -> Player:
 func _high_set_point(team: int) -> Vector3:
 	var s := side_of_team(team)
 	var base := Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s)
-	if not plan.is_empty() and int(plan["team"]) == team:
-		base = plan["pos"]
+	if plan != null and plan.team == team:
+		base = plan.pos
 	return Vector3(clampf(base.x, -2.5, 2.5), 0.0, s * clampf(absf(base.z) - 0.5, 1.2, 4.0))
 
 
 ## Pulo automático: segurando o botão no ataque, o jogador sobe na hora certa.
 func _auto_jumps() -> void:
-	if state != State.PLAY or plan.is_empty() or int(plan["act"]) != Act.ATTACK:
+	if state != State.PLAY or plan == null or plan.act != Act.ATTACK:
 		return
-	var t_ideal: float = plan["t"]
+	var t_ideal := plan.t
 	if time < t_ideal - Tuning.JUMP_TIME_UP or time > t_ideal + 0.1:
 		return
-	var at: Vector3 = plan["pos"]
-	var who: Player = plan["player"]
+	var at := plan.pos
+	var who := plan.player
 	if who == null or not who.is_grounded() or not (who.holding or _has_pending(who)):
 		return
 	if Vector2(at.x - who.position.x, at.z - who.position.z).length() <= Tuning.REACH + 1.2:
@@ -493,12 +487,12 @@ func _has_pending(p: Player) -> bool:
 func _update_assists() -> void:
 	for p in players:
 		p.magnet_on = false
-	if state != State.PLAY or plan.is_empty():
+	if state != State.PLAY or plan == null:
 		return
-	var who: Player = plan["player"]
+	var who := plan.player
 	if who != null:
 		who.magnet_on = true
-		who.magnet_point = plan["pos"]
+		who.magnet_point = plan.pos
 
 
 # ---------------------------------------------------------------- pontos
@@ -532,7 +526,7 @@ func _award(team: int, reason: String) -> void:
 	server_team = team
 	state = State.POINT_PAUSE
 	_pause_t = 1.8
-	plan = {}
+	plan = null
 	plan_id += 1
 	_pending.clear()
 	human_aiming = false
@@ -547,7 +541,7 @@ func _reset_for_serve(team: int) -> void:
 	rally_touches = 0
 	touches = 0
 	last_team = -1
-	plan = {}
+	plan = null
 	plan_id += 1
 	_pending.clear()
 	human_aiming = false
