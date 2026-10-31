@@ -59,6 +59,7 @@ const MAGNET_SPEED := 2.2
 
 # --- Mira ---
 const AIM_SENS := 0.028            # metros por pixel arrastado
+const AIM_DEEP := 5.5              # posição inicial da mira de saque/ataque: fundo da quadra adversária (m da rede)
 const SET_MAGNET_RADIUS := 1.3
 const SETTER_SPOT := Vector2(0.8, 1.6)   # (x, z) do levantamento do time 0; o bot usa o espelho
 

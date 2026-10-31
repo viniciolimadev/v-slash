@@ -34,8 +34,14 @@ var bot_level := 0                  # começa no Fácil: a meta da Fase 0 é sen
 var rng := RandomNumberGenerator.new()
 
 var human_aiming := false
-var human_aim := Vector3.ZERO
-var _aim_ctx: int = Act.NONE
+## Mira do humano: uma por tipo de jogada (recepção, levantamento, bola pro outro lado),
+## cada uma fica onde você deixou por último.
+var human_aim: Vector3:
+	get:
+		return _aims.get(_aim_slot(), Vector3.ZERO)
+	set(v):
+		_aims[_aim_slot()] = v
+var _aims := {}
 var _pause_t := 0.0
 var _pending: Array[Dictionary] = []
 
@@ -47,6 +53,13 @@ func setup(p_ball: Ball, p_players: Array[Player], p_bots: Array[BotBrain]) -> v
 	for p in players:
 		if p.is_human:
 			human = p
+			var s := side_of_team(p.team)
+			_aims = {
+				# saque/ataque/bola de graça começam no fundo da quadra adversária
+				Act.ATTACK: Vector3(0.0, 0.0, -s * Tuning.AIM_DEEP),
+				Act.RECEIVE: Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s),
+				Act.SET_BALL: _high_set_point(p.team),
+			}
 	rng.randomize()
 	_reset_for_serve(0)
 
@@ -86,12 +99,6 @@ func tick(dt: float) -> void:
 		if _pause_t <= 0.0:
 			_reset_for_serve(server_team)
 	_update_assists()
-	if human_aiming and human != null:
-		# o contexto mudou enquanto você segurava (ex.: bola chegou): recomeça a mira
-		var ctx := current_act(human)
-		if ctx != _aim_ctx:
-			_aim_ctx = ctx
-			human_aim = default_aim(human)
 
 
 # ---------------------------------------------------------------- consultas
@@ -192,8 +199,6 @@ func clamp_aim(p: Player, a: Vector3) -> Vector3:
 func human_press(p: Player) -> void:
 	p.holding = true
 	human_aiming = true
-	_aim_ctx = current_act(p)
-	human_aim = default_aim(p)
 
 
 func human_drag(p: Player, rel: Vector2) -> void:
@@ -206,14 +211,19 @@ func human_release(p: Player) -> void:
 	if not human_aiming:
 		return
 	human_aiming = false
-	attempt_hit(p, human_aim)
+	attempt_hit(p, clamp_aim(p, human_aim))
 
 
-## Mira que aparece na tela ({} = nenhuma).
+func _aim_slot() -> int:
+	var act := current_act(human) if human != null else Act.NONE
+	return act if act == Act.RECEIVE or act == Act.SET_BALL else Act.ATTACK
+
+
+## Mira que aparece na tela: sempre visível, onde você deixou por último ({} = sem humano).
 func human_aim_view() -> Dictionary:
-	if not human_aiming or human == null or current_act(human) == Act.NONE:
+	if human == null:
 		return {}
-	return snap_aim(human, human_aim)
+	return snap_aim(human, clamp_aim(human, human_aim))
 
 
 # ---------------------------------------------------------------- toque
