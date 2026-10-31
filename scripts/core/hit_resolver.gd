@@ -26,10 +26,10 @@ func _init(p_rng: RandomNumberGenerator) -> void:
 func resolve(game: Game, p: Player, act: int, aim: Vector3, q: float, cap: float) -> Shot:
 	var from := game.ball.position
 	var power := minf(q, cap)          # timing = precisão; o bot só limita a FORÇA
-	var info := game.snap_aim(p, aim)
+	var info := game.snap_aim(p, aim, act)
 	var target: Vector3 = info["pos"]
 	var s := Game.side_of_team(p.team)
-	var over := Game.side_of_point(target) != s or act == Game.Act.ATTACK
+	var over := Game.side_of_point(target) != s or act == Game.Act.ATTACK or act == Game.Act.DINK
 	var kind := act
 	if over and (act == Game.Act.RECEIVE or act == Game.Act.SET_BALL):
 		kind = Game.Act.FREEBALL
@@ -52,6 +52,8 @@ func resolve(game: Game, p: Player, act: int, aim: Vector3, q: float, cap: float
 		var spd := lerpf(Tuning.ATTACK_SPEED_MIN, Tuning.ATTACK_SPEED_MAX, power)
 		grav = Tuning.SPIKE_GRAVITY
 		v = BallSim.clear_net_velocity(from, to, maxf(dist / spd, 0.25), grav)
+	elif kind == Game.Act.DINK:
+		v = _dink_velocity(from, Vector3(target.x, Tuning.BALL_RADIUS, target.z))
 	else:
 		var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
 		v = BallSim.clear_net_velocity(from, to, Tuning.T_FREEBALL)
@@ -62,6 +64,21 @@ func resolve(game: Game, p: Player, act: int, aim: Vector3, q: float, cap: float
 	shot.kind = kind
 	shot.target = target
 	return shot
+
+
+## Largada: bola lenta que passa a rede (e as mãos de quem bloqueia) acima do alcance do bloqueio.
+func _dink_velocity(from: Vector3, to: Vector3) -> Vector3:
+	var need := Tuning.NET_HEIGHT + Tuning.BLOCK_REACH + Tuning.DINK_APEX_MARGIN
+	var hands_z := signf(from.z) * Tuning.BLOCK_DEPTH
+	var t := Tuning.T_DINK
+	var v := BallSim.clear_net_velocity(from, to, t)
+	for _i in 40:
+		var low := minf(BallSim.height_at_net(from, v), BallSim.height_at_z(from, v, hands_z))
+		if low >= need:
+			break
+		t *= 1.07
+		v = BallSim.clear_net_velocity(from, to, t)
+	return v
 
 
 ## Saque do tipo `serve_kind` saindo de `from` (mão do sacador ou bola lançada).
@@ -140,6 +157,8 @@ func scatter(target: Vector3, kind: int, q: float) -> Vector3:
 		base = Tuning.SCATTER_SET
 	elif kind == Game.Act.ATTACK or kind == Game.Act.FREEBALL:
 		base = Tuning.SCATTER_ATTACK
+	elif kind == Game.Act.DINK:
+		base = Tuning.SCATTER_DINK
 	return _scatter_by(target, base, q)
 
 

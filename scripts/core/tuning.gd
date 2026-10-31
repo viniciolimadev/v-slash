@@ -38,6 +38,9 @@ const T_FREEBALL := 1.5
 const ATTACK_SPEED_MIN := 9.0      # m/s na horizontal com toque ruim
 const ATTACK_SPEED_MAX := 14.0     # m/s na horizontal com toque perfeito
 const NET_CLEARANCE := 0.12        # folga mínima acima da rede
+const T_DINK := 0.9                # s de voo da largada (sobe até passar o bloqueio)
+const DINK_DIST := 2.5             # m da rede: ataque mirado mais perto que isso vira largada
+const DINK_APEX_MARGIN := 0.3      # m: a largada cruza a rede acima do alcance do bloqueio com esta folga
 
 # --- Timing do toque (s) ---
 const WINDOW_EARLY := 0.35         # quanto antes do ideal ainda vale
@@ -53,6 +56,7 @@ const MAX_TOUCHES := 3           # toques por lado (no 1v1, todos do mesmo jogad
 const SCATTER_RECEIVE := 1.8
 const SCATTER_SET := 1.2
 const SCATTER_ATTACK := 2.2
+const SCATTER_DINK := 0.6
 
 # --- Saque (índice = ServeType.Kind: POR BAIXO, FLUTUANTE, VIAGEM) ---
 const SERVE_HAND_H := 1.5          # m: altura da mão que lança a bola para cima
@@ -99,14 +103,14 @@ const AIM_MARGIN := 0.5            # a mira não sai da quadra: fica 0,5 m para 
 const AIM_MAGNET_RADIUS := 1.2     # saque/ataque: a mira gruda na zona mais próxima
 const RECEIVE_MAGNET_RADIUS := 1.8 # recepção: gruda no levantador
 const ASSIST_KEEP_IN_Q := 0.7      # toque BOM ou melhor: a bola não sai da quadra
-# zonas de saque/ataque na quadra adversária: (x, distância da rede); x > 0 = sua direita
+# zonas de saque/ataque na quadra adversária: (x, distância da rede, largada?); x > 0 = sua direita
 const ATTACK_ZONES := [
-	["FUNDO", Vector2(0.0, 5.8)],
-	["FUNDO ESQ", Vector2(-2.6, 5.8)],
-	["FUNDO DIR", Vector2(2.6, 5.8)],
-	["MEIO", Vector2(0.0, 3.4)],
-	["CURTA ESQ", Vector2(-2.2, 1.8)],
-	["CURTA DIR", Vector2(2.2, 1.8)],
+	["FUNDO", Vector2(0.0, 5.8), false],
+	["FUNDO ESQ", Vector2(-2.6, 5.8), false],
+	["FUNDO DIR", Vector2(2.6, 5.8), false],
+	["MEIO", Vector2(0.0, 3.4), false],
+	["CURTA ESQ", Vector2(-2.2, 1.8), true],
+	["CURTA DIR", Vector2(2.2, 1.8), true],
 ]
 const SETTER_SPOT := Vector2(0.8, 1.6)   # (x, z) do levantamento do time 0; o bot usa o espelho
 

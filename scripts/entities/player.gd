@@ -123,8 +123,8 @@ func swing(kind: int) -> void:
 		_swing_tw.kill()
 	_swing_tw = create_tween()
 	var peak := 1.2                         # manchete: braços à frente
-	if kind == Game.Act.SET_BALL or kind == Game.Act.BLOCK:
-		peak = 2.9                          # toque e bloqueio: braços para cima
+	if kind == Game.Act.SET_BALL or kind == Game.Act.BLOCK or kind == Game.Act.DINK:
+		peak = 2.9                          # toque, bloqueio e largada: braços para cima
 	elif kind == Game.Act.ATTACK:
 		_arms.rotation.x = 3.0
 		peak = 0.5                          # cortada: de cima para baixo

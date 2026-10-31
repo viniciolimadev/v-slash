@@ -372,3 +372,4 @@ Depois da fatia: rodar a simulação de equilíbrio (tabela do README em % de po
 | B-17 | Depois que a cortada sai, o botão de quem defende é RECEBER (o plano normal tem prioridade): o bloqueio é decidido antes do ataque, como na quadra | bloquear também depois da cortada |
 | B-18 | O pulo de bloqueio é no lugar (mãos em x fixo, sem a deriva do pulo de ataque); depois dele o jogador não toca por `2·JUMP_TIME_UP + BLOCK_RECOVER` | deriva até o x previsto |
 | B-19 | Bloqueio ruim desvia por cima da rede (sem bater nela) para fora pela lateral mais perto: ponto do atacante | desvio aleatório que às vezes fica dentro |
+| B-20 | A largada é garantida pela **altura ao cruzar as mãos e a rede** (≥ `NET_HEIGHT + BLOCK_REACH + DINK_APEX_MARGIN`), não pelo ápice: com ápice alto mas antes da rede a bola já descia e batia no bloqueio | ápice, como o esboço |

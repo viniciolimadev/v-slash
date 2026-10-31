@@ -179,6 +179,8 @@ func _act_color(act: int) -> Color:
 		return Color(0.35, 0.6, 1.0)
 	if act == Game.Act.ATTACK:
 		return Color(1.0, 0.55, 0.2)
+	if act == Game.Act.DINK:
+		return Color(1.0, 0.8, 0.35)
 	if act == Game.Act.FREEBALL:
 		return Color(0.85, 0.85, 0.85)
 	if act == Game.Act.BLOCK:

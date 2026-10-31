@@ -10,13 +10,14 @@ signal set_over(team: int, set_index: int, final: Vector2i)
 signal match_over(team: int)
 signal served(player: Player, serve_kind: int, grade: String)
 ## Mecânica da Fase 2 usada (pulo de bloqueio, largada, peixinho): estatística e testes.
+## DINK não é planejado por _make_plan: é a variação do ATTACK decidida pela mira na hora.
 signal action_used(player: Player, act: int)
 
 ## SERVE_TOSS: bola lançada no saque flutuante/viagem, esperando o toque (Fase 2).
 enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER, SERVE_TOSS }
-enum Act { NONE, SERVE, RECEIVE, SET_BALL, ATTACK, FREEBALL, BLOCK }
+enum Act { NONE, SERVE, RECEIVE, SET_BALL, ATTACK, FREEBALL, BLOCK, DINK }
 
-const ACT_LABELS := ["", "SACAR", "RECEBER", "LEVANTAR", "ATACAR", "PASSAR", "BLOQUEAR"]
+const ACT_LABELS := ["", "SACAR", "RECEBER", "LEVANTAR", "ATACAR", "PASSAR", "BLOQUEAR", "LARGAR"]
 
 var state: int = State.SERVE_WAIT
 var time := 0.0
@@ -138,6 +139,9 @@ func current_act(p: Player) -> int:
 	if not _in_rally():
 		return Act.NONE
 	if plan != null and plan.player == p:
+		# o botão avisa a largada antes de soltar: a mira está numa zona curta
+		if plan.act == Act.ATTACK and p == human and is_dink(p, clamp_aim(p, human_aim, Act.ATTACK)):
+			return Act.DINK
 		return plan.act
 	if block_plan != null and block_plan.player == p:
 		return Act.BLOCK
@@ -232,9 +236,11 @@ func _magnet_radius(act: int) -> float:
 
 
 ## Mira final: gruda no alvo mais próximo da jogada (se estiver perto).
-func snap_aim(p: Player, raw: Vector3) -> Dictionary:
+## act < 0 = a ação atual do jogador.
+func snap_aim(p: Player, raw: Vector3, act: int = -1) -> Dictionary:
 	var out := {"pos": raw, "name": "", "quick": false}
-	var act := current_act(p)
+	if act < 0:
+		act = current_act(p)
 	var mags := aim_magnets(p, act)
 	if mags.is_empty():
 		return out
@@ -252,6 +258,16 @@ func snap_aim(p: Player, raw: Vector3) -> Dictionary:
 	return out
 
 
+## Ataque mirado curto vira largada: zona curta (CURTA ESQ/DIR) ou a menos de DINK_DIST da rede.
+func is_dink(p: Player, aim: Vector3) -> bool:
+	var info := snap_aim(p, aim, Act.ATTACK)
+	var target: Vector3 = info["pos"]
+	for z in Tuning.ATTACK_ZONES:
+		if str(z[0]) == str(info["name"]) and bool(z[2]):
+			return true
+	return absf(target.z) < Tuning.DINK_DIST
+
+
 func default_aim(p: Player) -> Vector3:
 	var s := side_of_team(p.team)
 	var act := current_act(p)
@@ -264,14 +280,15 @@ func default_aim(p: Player) -> Vector3:
 	return Vector3(0.0, 0.0, -s * Tuning.COURT_DEPTH * 0.6)
 
 
-func clamp_aim(p: Player, a: Vector3) -> Vector3:
+func clamp_aim(p: Player, a: Vector3, act: int = -1) -> Vector3:
 	var s := side_of_team(p.team)
 	# assistência: a mira nunca sai da quadra
 	var w := Tuning.COURT_HALF_W - Tuning.AIM_MARGIN
 	var d := Tuning.COURT_DEPTH - Tuning.AIM_MARGIN
 	var out := Vector3(clampf(a.x, -w, w), 0.0, clampf(a.z, -d, d))
-	var act := current_act(p)
-	if act == Act.SERVE or act == Act.ATTACK:
+	if act < 0:
+		act = current_act(p)
+	if act == Act.SERVE or act == Act.ATTACK or act == Act.DINK:
 		out.z = minf(out.z, -0.6) if s > 0.0 else maxf(out.z, 0.6)
 	return out
 
@@ -387,7 +404,11 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 	if plan.act == Act.SERVE:
 		_serve(p, aim, q, grade)
 		return
-	var shot := resolver.resolve(self, p, plan.act, aim, q, cap)
+	var act := plan.act
+	if act == Act.ATTACK and is_dink(p, aim):
+		act = Act.DINK
+		action_used.emit(p, Act.DINK)
+	var shot := resolver.resolve(self, p, act, aim, q, cap)
 	_launch(shot)
 	p.lunge(shot.from)
 	if p.team != last_team:

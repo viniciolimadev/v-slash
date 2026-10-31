@@ -40,6 +40,8 @@ func _run() -> void:
 	_test_float_physics()
 	print("== bloqueio ==")
 	_test_block()
+	print("== largada ==")
+	_test_dink()
 	print("== regras da partida (sets) ==")
 	_test_match_rules()
 	print("== partida completa bot x bot ==")
@@ -710,6 +712,41 @@ func _test_block() -> void:
 	game.blocks.append(away)
 	game._execute(foe, Vector3(2.5, 0.0, 5.0), 0.0, 1.0)
 	_check(not bool(game.ball.sim.predict()["blocked"]), "cortada na diagonal, longe das mãos, passa")
+	_free_main(main)
+
+
+func _test_dink() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var foe: Player = main.get("foe")
+	game.bots.clear()
+	game.state = Game.State.PLAY
+	var at := Vector3(0.0, Tuning.H_ATTACK, 2.0)
+	human.position = Vector3(at.x, 0.0, at.z)
+	game.plan = ContactPlan.new(human.team, 3, Game.Act.ATTACK, game.time, at, human)
+	game.human_aim = _zone_pos(game, human, "CURTA ESQ")
+	_check(game.current_act(human) == Game.Act.DINK and game.action_label(human) == "LARGAR",
+			"mira na zona curta: o botão diz LARGAR")
+	game.human_aim = _zone_pos(game, human, "FUNDO")
+	_check(game.current_act(human) == Game.Act.ATTACK, "mira no fundo: continua ATACAR")
+
+	# largada do bot passa por cima de um bloqueio perfeito seu
+	_attack_setup(game, foe, human, Vector3(0.0, 0.0, 0.6))
+	var used := [0]
+	game.action_used.connect(func(_p: Player, act: int) -> void:
+		if act == Game.Act.DINK:
+			used[0] += 1)
+	game._execute(foe, Vector3(0.0, 0.0, 1.8), 0.0, 1.0)
+	var t_plane := _time_at_block_plane(game)
+	var bk := Block.new(human, t_plane - Tuning.JUMP_TIME_UP, Tuning.JUMP_HEIGHT)
+	game.blocks.append(bk)
+	game.ball.sim.blocks.append(bk)
+	var pred := game.ball.sim.predict()
+	var land: Vector3 = pred["land"]
+	_check(used[0] == 1 and game.last_kind == Game.Act.DINK, "bot mirando a 1,8 m da rede larga")
+	_check(not bool(pred["blocked"]) and land.z > 0.0 and Game.is_inside(land),
+			"largada passa por cima do bloqueio perfeito e cai dentro (%s)" % land)
 	_free_main(main)
 
 

@@ -73,9 +73,14 @@ static func pos_at(p0: Vector3, v0: Vector3, t: float, grav: float = Tuning.GRAV
 
 ## Altura do centro da bola ao cruzar o plano da rede (INF se não cruza).
 static func height_at_net(p0: Vector3, v0: Vector3, grav: float = Tuning.GRAVITY) -> float:
+	return height_at_z(p0, v0, 0.0, grav)
+
+
+## Altura do centro da bola ao cruzar o plano z (INF se não cruza).
+static func height_at_z(p0: Vector3, v0: Vector3, z: float, grav: float = Tuning.GRAVITY) -> float:
 	if absf(v0.z) < 1e-6:
 		return INF
-	var t := -p0.z / v0.z
+	var t := (z - p0.z) / v0.z
 	if t <= 0.0:
 		return INF
 	return pos_at(p0, v0, t, grav).y
