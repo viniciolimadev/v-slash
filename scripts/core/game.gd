@@ -34,6 +34,7 @@ var land_point := Vector3.ZERO      # onde a bola cai se ninguém tocar
 var land_in := true
 var bot_level := 0                  # começa no Fácil: a meta da Fase 0 é sentir o gesto
 var rng := RandomNumberGenerator.new()
+var resolver := HitResolver.new(rng)
 
 var human_aiming := false
 ## Mira do humano: um ponto só, que se move apenas quando você arrasta.
@@ -328,39 +329,9 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 		else:
 			q = 0.35
 			grade = "CEDO" if err < 0.0 else "TARDE"
-	var power := minf(q, cap)          # timing = precisão; o bot só limita a FORÇA
-	var act := plan.act
-	var info := snap_aim(p, aim)
-	var target: Vector3 = info["pos"]
-	var s := side_of_team(p.team)
-	var over := side_of_point(target) != s or act == Act.ATTACK
-	var kind := act
-	if over and (act == Act.RECEIVE or act == Act.SET_BALL):
-		kind = Act.FREEBALL
-	target = _scatter(target, kind, q)
-	target = _keep_side(target, -s if over else s, 0.4)
-	if p.is_human and q >= Tuning.ASSIST_KEEP_IN_Q:
-		target = keep_inside(target)
-	var v := Vector3.ZERO
-	var grav := Tuning.GRAVITY
-	if kind == Act.RECEIVE:
-		var to := Vector3(target.x, Tuning.H_SET, target.z)
-		v = BallSim.launch_velocity(from, to, Tuning.T_RECEIVE * lerpf(0.82, 1.0, q))
-	elif kind == Act.SET_BALL:
-		var to := Vector3(target.x, Tuning.H_ATTACK, target.z)
-		var t_set := Tuning.T_SET_QUICK if bool(info["quick"]) else Tuning.T_SET_HIGH
-		v = BallSim.launch_velocity(from, to, t_set)
-	elif kind == Act.ATTACK:
-		var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
-		var dist := Vector2(to.x - from.x, to.z - from.z).length()
-		var spd := lerpf(Tuning.ATTACK_SPEED_MIN, Tuning.ATTACK_SPEED_MAX, power)
-		grav = Tuning.SPIKE_GRAVITY
-		v = BallSim.clear_net_velocity(from, to, maxf(dist / spd, 0.25), grav)
-	else:
-		var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
-		v = BallSim.clear_net_velocity(from, to, Tuning.T_FREEBALL)
-	ball.launch(from, v, grav)
-	p.lunge(from)
+	var shot := resolver.resolve(self, p, plan.act, aim, q, cap)
+	ball.launch(shot.from, shot.vel, shot.grav)
+	p.lunge(shot.from)
 	if p.team != last_team:
 		touches = 1
 	else:
@@ -368,7 +339,7 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 	last_team = p.team
 	rally_touches += 1
 	p.swing_cd = 0.25
-	p.swing(kind)
+	p.swing(shot.kind)
 	touch_made.emit(p, grade, q)
 	_make_plan()
 
@@ -377,7 +348,7 @@ func _serve(p: Player, aim: Vector3) -> void:
 	var s := side_of_team(p.team)
 	var q := 0.85                      # Fase 0: saque sem timing (barra de força chega na Fase 2)
 	var snapped: Vector3 = snap_aim(p, aim)["pos"]
-	var target := _keep_side(_scatter(snapped, Act.SERVE, q), -s, 0.8)
+	var target := _keep_side(resolver.scatter(snapped, Act.SERVE, q), -s, 0.8)
 	if p.is_human and q >= Tuning.ASSIST_KEEP_IN_Q:
 		target = keep_inside(target)
 	var from := p.position + Vector3(0.0, 1.05, -0.3 * s)
@@ -417,19 +388,6 @@ func _whiff(p: Player, why: String) -> void:
 	p.swing_cd = Tuning.WHIFF_COOLDOWN
 	p.swing(Act.NONE)
 	whiffed.emit(p, why)
-
-
-func _scatter(target: Vector3, kind: int, q: float) -> Vector3:
-	var base := Tuning.SCATTER_RECEIVE
-	if kind == Act.SET_BALL:
-		base = Tuning.SCATTER_SET
-	elif kind == Act.ATTACK or kind == Act.FREEBALL:
-		base = Tuning.SCATTER_ATTACK
-	elif kind == Act.SERVE:
-		base = Tuning.SCATTER_SERVE
-	var r := base * (1.0 - q) * sqrt(rng.randf())
-	var ang := rng.randf() * TAU
-	return target + Vector3(cos(ang) * r, 0.0, sin(ang) * r)
 
 
 ## Assistência: traz o alvo para dentro da quadra (com folga das linhas).

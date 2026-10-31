@@ -32,6 +32,8 @@ func _run() -> void:
 	_test_aim_assist()
 	print("== plano de contato ==")
 	_test_contact_plan()
+	print("== HitResolver (mesmos números do código antigo) ==")
+	_test_hit_resolver()
 	print("== regras da partida (sets) ==")
 	_test_match_rules()
 	print("== partida completa bot x bot ==")
@@ -384,6 +386,38 @@ func _test_contact_plan() -> void:
 	game.touches = Tuning.MAX_TOUCHES
 	game._make_plan()
 	_check(game.plan == null, "toque além de MAX_TOUCHES não gera plano (a bola cai)")
+	_free_main(main)
+
+
+func _test_hit_resolver() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var foe: Player = main.get("foe")
+	# [time, ação, bola no contato, mira, q, cap, velocidade de saída gravada da Fase 1 (semente 100 + i)]
+	var cases := [
+		[0, Game.Act.RECEIVE, Vector3(0.0, 0.9, 4.0), Vector3(0.8, 0, 1.6), 1.0, 1.0, Vector3(0.5925926, 8.425, -1.7777778)],
+		[0, Game.Act.RECEIVE, Vector3(1.0, 0.9, 5.0), Vector3(2.0, 0, 3.0), 0.35, 1.0, Vector3(0.74478984, 7.688778, -1.7320404)],
+		[0, Game.Act.SET_BALL, Vector3(0.5, 2.25, 1.8), Vector3(0.0, 0, 0.9), 0.7, 1.0, Vector3(-0.60652065, 5.1916666, -0.7462158)],
+		[0, Game.Act.SET_BALL, Vector3(0.5, 2.25, 1.8), Vector3(-1.0, 0, -3.0), 0.7, 1.0, Vector3(-1.0793442, 6.8566666, -3.3409824)],
+		[0, Game.Act.ATTACK, Vector3(0.0, 3.05, 1.5), Vector3(2.6, 0, -5.8), 1.0, 1.0, Vector3(4.697263, -0.79307765, -13.18847)],
+		[0, Game.Act.ATTACK, Vector3(0.0, 3.05, 1.5), Vector3(-2.0, 0, -3.0), 0.35, 1.0, Vector3(-3.6223698, 0.6058035, -6.7545953)],
+		[1, Game.Act.ATTACK, Vector3(0.0, 3.05, -1.5), Vector3(1.0, 0, 4.0), 0.7, 0.5, Vector3(1.2948216, -0.42196736, 8.677219)],
+		[0, Game.Act.FREEBALL, Vector3(0.0, 2.25, 3.0), Vector3(0.0, 0, -4.0), 0.7, 1.0, Vector3(-0.081518985, 6.8566666, -3.9796379)],
+	]
+	var worst := 0.0
+	for i in cases.size():
+		var c: Array = cases[i]
+		var p: Player = human if c[0] == 0 else foe
+		game.rng.seed = 100 + i
+		game.state = Game.State.PLAY
+		var from: Vector3 = c[2]
+		p.position = Vector3(from.x, 0.0, from.z)
+		game.ball.launch(from, Vector3.ZERO)
+		game.plan = ContactPlan.new(p.team, 1, c[1], game.time, from, p)
+		var shot := game.resolver.resolve(game, p, c[1], c[3], c[4], c[5])
+		worst = maxf(worst, shot.vel.distance_to(c[6]))
+	_check(worst < 1e-4, "mesma semente = mesma saída da bola que a Fase 1 (diferença %.6f)" % worst)
 	_free_main(main)
 
 
