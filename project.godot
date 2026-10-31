@@ -11,8 +11,9 @@ config_version=5
 [application]
 
 config/name="Volei Mobile"
-config/description="Fase 0: bola cinemática, marcador de contato e gesto segura-mira-solta."
-run/main_scene="res://scenes/main.tscn"
+config/description="Fase 1: partida em sets contra bot, telas, tutorial, pausa, opções e save."
+run/main_scene="res://scenes/app.tscn"
+config/quit_on_go_back=false
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [display]

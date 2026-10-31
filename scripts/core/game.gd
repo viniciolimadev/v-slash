@@ -39,6 +39,7 @@ var human_aiming := false
 ## Mira do humano: um ponto só, que se move apenas quando você arrasta.
 ## A bola vai para onde ela está (os ímãs ajudam quando ela está perto de um alvo).
 var human_aim := Vector3.ZERO
+var aim_sens := 1.0                 # opção do jogador: multiplica Tuning.AIM_SENS
 var _pause_t := 0.0
 var _next_server := 0
 var _set_break := false             # a pausa atual é de fim de set
@@ -235,7 +236,14 @@ func human_press(p: Player) -> void:
 
 func human_drag(p: Player, rel: Vector2) -> void:
 	if human_aiming:
-		human_aim = clamp_aim(p, human_aim + Vector3(rel.x, 0.0, rel.y) * Tuning.AIM_SENS)
+		human_aim = clamp_aim(p, human_aim + Vector3(rel.x, 0.0, rel.y) * Tuning.AIM_SENS * aim_sens)
+
+
+## Abandona a mira sem tocar (pausa no meio do gesto: soltar depois não dispara nada).
+func cancel_aim() -> void:
+	human_aiming = false
+	if human != null:
+		human.holding = false
 
 
 func human_release(p: Player) -> void:
@@ -382,6 +390,26 @@ func _serve(p: Player, aim: Vector3) -> void:
 	rally_touches = 1
 	p.swing(Act.SERVE)
 	touch_made.emit(p, "SAQUE", q)
+	_make_plan()
+
+
+## Treino (tutorial): lança uma bola do lado do adversário para o seu, como se ele
+## tivesse passado a bola. Sem saque; quem estava sacando é liberado.
+func feed_ball(to: Vector3, flight_time: float) -> void:
+	for p in players:
+		p.serving = false
+		p.holding = false
+	server = null
+	state = State.PLAY
+	rally_over = false
+	rally_touches = 0
+	last_team = 1
+	touches = 1
+	_pending.clear()
+	human_aiming = false
+	var from := Vector3(0.0, 2.6, -3.0)
+	var at := Vector3(to.x, Tuning.BALL_RADIUS, to.z)
+	ball.launch(from, BallSim.clear_net_velocity(from, at, flight_time))
 	_make_plan()
 
 

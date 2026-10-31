@@ -16,6 +16,7 @@ const SETS_TO_WIN := 2             # melhor de 3
 const WIN_BY := 2                  # vantagem mínima para fechar o set
 const POINT_PAUSE := 1.8           # s entre um ponto e o próximo saque
 const SET_PAUSE := 3.0             # s de faixa "Fim do set" antes do saque seguinte
+const MATCH_END_DELAY := 2.0       # s de comemoração antes da tela de resultado
 
 # --- Bola ---
 const BALL_RADIUS := 0.16          # maior que a real (0,105) p/ ler na tela do celular

@@ -18,6 +18,7 @@ const DEAD_ZONE := 0.12
 
 var action_label := ""
 var action_hot := false             # true quando está na hora de soltar
+var left_handed := false            # canhoto: botão de ação à esquerda, joystick à direita
 
 var _move := Vector2.ZERO
 var _joy_index := -1
@@ -47,7 +48,7 @@ func _input(event: InputEvent) -> void:
 		if st.pressed:
 			if st.position.y < TOP_BAR:
 				return
-			if st.position.x < _screen().x * 0.5:
+			if _is_move_side(st.position.x):
 				if _joy_index == -1:
 					_joy_index = st.index
 					_joy_origin = st.position
@@ -93,11 +94,19 @@ func _screen() -> Vector2:
 	return get_viewport_rect().size
 
 
+func _is_move_side(x: float) -> bool:
+	return (x < _screen().x * 0.5) != left_handed
+
+
 func _joy_home() -> Vector2:
+	if left_handed:
+		return Vector2(_screen().x - 170.0, _screen().y - 170.0)
 	return Vector2(170.0, _screen().y - 170.0)
 
 
 func _button_center() -> Vector2:
+	if left_handed:
+		return Vector2(170.0, _screen().y - 170.0)
 	return Vector2(_screen().x - 170.0, _screen().y - 170.0)
 
 

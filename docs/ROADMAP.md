@@ -12,7 +12,9 @@ Regras para todas as fases:
 
 ---
 
-## Fase 1 — Partida de verdade (1v1)
+## Fase 1 — Partida de verdade (1v1) ✅
+
+Concluída em 2026-10-31 (versão 0.2.0). Partida média de 7,8 min contra o Fácil (meta revista para 6–9 min, DP-05).
 
 **Meta:** sair do "rally infinito" e virar uma partida com começo, meio e fim, que dá vontade de pedir revanche.
 Design detalhado: [SDD-fase-1.md](SDD-fase-1.md).
@@ -26,7 +28,7 @@ Design detalhado: [SDD-fase-1.md](SDD-fase-1.md).
 | 1.5 | Tutorial | 3 passos jogáveis na 1ª vez: andar até o anel → soltar no tempo → arrastar a mira. Pulável. |
 | 1.6 | Opções | Sensibilidade da mira, modo canhoto (inverte metades da tela), vibração liga/desliga. |
 
-**Pronto quando:** partida bot × bot termina sozinha no teste headless; uma partida humana contra o Fácil dura 4–7 min; e2e passa pelo fluxo título → resultado.
+**Pronto quando:** partida bot × bot termina sozinha no teste headless; uma partida humana contra o Fácil dura 6–9 min em média; e2e passa pelo fluxo título → resultado.
 
 ---
 
@@ -91,3 +93,4 @@ Export release assinado, ícone e splash, Play Store (teste interno → aberto),
 2. **Partida:** melhor de 3 sets de 15, vantagem de 2.
 3. **Stamina:** experimento atrás de flag na Fase 2; fica só se o teste no celular aprovar.
 4. **Multiplayer** (local ou online): fora do plano; reavaliar depois da Fase 5.
+5. **Duração da partida:** ~8 min em média contra o Fácil é aceitável; meta 6–9 min (sem mudar formato nem pausas).

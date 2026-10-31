@@ -4,6 +4,11 @@ extends CanvasLayer
 
 signal reset_pressed
 signal level_pressed
+signal pause_pressed
+
+## STANDALONE: main.tscn sozinha (Reiniciar + nível do bot). MATCH: partida do App (pausa).
+## TUTORIAL: sem placar, só pausa.
+enum Mode { STANDALONE, MATCH, TUTORIAL }
 
 var _score: Label
 var _rally: Label
@@ -12,6 +17,8 @@ var _banner: Label
 var _popup: Label
 var _message: Label
 var _level_btn: Button
+var _reset_btn: Button
+var _pause_btn: Button
 var _popup_tw: Tween
 var _msg_tw: Tween
 var _banner_tw: Tween
@@ -33,9 +40,16 @@ func _ready() -> void:
 	_message.modulate.a = 0.0
 	_banner.modulate.a = 0.0
 
-	var reset := _make_button(root, "Reiniciar")
-	reset.position = Vector2(14.0, 12.0)
-	reset.pressed.connect(func() -> void: reset_pressed.emit())
+	_reset_btn = _make_button(root, "Reiniciar")
+	_reset_btn.position = Vector2(14.0, 12.0)
+	_reset_btn.pressed.connect(func() -> void: reset_pressed.emit())
+
+	_pause_btn = _make_button(root, "II")
+	_pause_btn.custom_minimum_size = Vector2(72.0, 56.0)
+	_pause_btn.size = _pause_btn.custom_minimum_size
+	_pause_btn.position = Vector2(14.0, 12.0)
+	_pause_btn.visible = false
+	_pause_btn.pressed.connect(func() -> void: pause_pressed.emit())
 
 	_level_btn = _make_button(root, "Bot: Médio")
 	_level_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -44,6 +58,16 @@ func _ready() -> void:
 	_level_btn.offset_top = 12.0
 	_level_btn.offset_bottom = 58.0
 	_level_btn.pressed.connect(func() -> void: level_pressed.emit())
+
+
+func set_mode(mode: Mode) -> void:
+	_reset_btn.visible = mode == Mode.STANDALONE
+	_level_btn.visible = mode == Mode.STANDALONE
+	_pause_btn.visible = mode != Mode.STANDALONE
+	_score.visible = mode != Mode.TUTORIAL
+	_rally.visible = mode != Mode.TUTORIAL
+	if mode != Mode.STANDALONE:
+		E2eHooks.publish("hud/pause", _pause_btn)
 
 
 func set_board(rules: MatchRules, rally: int, best: int) -> void:

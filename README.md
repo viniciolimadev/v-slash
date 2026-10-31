@@ -1,18 +1,20 @@
-# Vôlei Mobile — Fase 0
+# Vôlei Mobile — Fase 1
 
-Protótipo 1v1 contra bot: **bola cinemática + anel de timing + gesto segura → mira → solta**.
+Vôlei 1v1 contra bot: **bola cinemática + anel de timing + gesto segura → mira → solta**.
+Partida em **melhor de 3 sets de 15** (vantagem de 2), com título, escolha do bot, tutorial, pausa, opções e resultado; progresso salvo no aparelho.
 Tudo é gerado por código (formas simples). Godot **4.7**, renderizador Compatibility (Android/iOS/Web).
 
 ## Abrir e jogar
 
 1. Godot 4.7 → **Importar** → escolha `project.godot`.
-2. **F5** roda no PC. O bot começa no **Fácil** (botão no canto superior direito troca).
+2. **F5** abre o título. Na 1ª partida o tutorial roda antes (dá para pular). Médio libera ao vencer o Fácil; Difícil ao vencer o Médio.
+3. Só a partida, sem menus (rally infinito, troca de nível no topo): abra `scenes/main.tscn` e **F6**.
 
 | Ação | Celular | PC |
 |---|---|---|
 | Andar | polegar esquerdo (o joystick nasce onde você encosta) | WASD / setas |
 | Tocar na bola | segure na metade direita → arraste para mirar → **solte** | segure **Espaço** (mira padrão) ou clique-segure-arraste na direita |
-| Reiniciar / nível do bot | botões do topo | mouse |
+| Pausa | botão **II** ou voltar do Android (trocar de app também pausa) | mouse |
 
 ## O loop
 
@@ -27,7 +29,8 @@ Tudo é gerado por código (formas simples). Godot **4.7**, renderizador Compati
 
 Timing ruim = bola menos precisa (e cortada mais fraca). Longe do anel = "LONGE", não toca.
 
-**Meta da Fase 0:** rally de **5+ toques** e vontade de jogar mais uma. O HUD mostra Rally e Recorde.
+O HUD mostra o placar do set, os sets, **SET POINT / MATCH POINT**, o rally e o recorde.
+Opções (título ou pausa): sensibilidade da mira, modo canhoto (joystick e botão trocam de lado), vibração.
 
 ## Ajustar o feel → `scripts/core/tuning.gd`
 
@@ -49,6 +52,8 @@ Equilíbrio dos valores atuais (simulação de 20 min por linha, "humano" com re
 |---|---|---|---|
 | bom (reação 0,25 s, erro 50 ms) | 77% dos pontos | 52% | 20% |
 | casual (reação 0,4 s, erro 90 ms) | 54% | 33% | 13% |
+
+Partida inteira (`_test_match_duration`, casual × Fácil, 8 partidas com sementes fixas): vence **3 de 8**, média **7,8 min** (2 sets ≈ 6–7 min; 3 sets ≈ 9–11 min).
 
 ## Testar no celular sem instalar nada (CI)
 
@@ -73,11 +78,11 @@ Uma vez só: Settings → Pages → Source = **GitHub Actions**.
 
 ```bash
 godot --headless --import                              # 1ª vez: registra as classes
-godot --headless --script res://tests/run_tests.gd     # física, câmera, bot x bot, humano roteirizado
+godot --headless --script res://tests/run_tests.gd     # física, sets, save, telas, tutorial, simulações
 godot -- --autoplay                                    # demo bot x bot
 ```
 
-Teste no navegador emulando celular (toque no analógico e no botão, com prints):
+Teste no navegador emulando celular (título → escolha → tutorial → partida → pausa → menu, com prints):
 
 ```bash
 mkdir -p export && touch export/.gdignore             # Godot ignora builds/prints
@@ -91,15 +96,20 @@ No CI os prints ficam em Actions → execução → Artifacts → `e2e-screensho
 ## Estrutura
 
 ```
-project.godot          config do Godot (cena principal: scenes/main.tscn)
-scenes/main.tscn       cena raiz
+project.godot          config do Godot (cena principal: scenes/app.tscn)
+scenes/app.tscn        raiz do app: telas + partida
+scenes/main.tscn       uma partida (roda sozinha: testes, --autoplay, F6)
 scripts/
-  main.gd              monta a cena e liga tudo
-  core/                regras e física (sem nós visuais)
+  main.gd              monta a partida e liga tudo (MatchScene)
+  app/                 roteador de telas (App) e MatchConfig
+  core/                regras, física, sets, estatísticas, save (sem nós visuais)
   ai/                  bot
   entities/            objetos 3D do jogo
-  ui/                  HUD, controles e marcadores
+  ui/                  HUD, controles, marcadores, pausa
+  ui/screens/          título, escolha do bot, resultado, opções
+  tutorial/            tutorial jogável
 tests/run_tests.gd     testes headless
+docs/                  roadmap, SDDs, padrão de trabalho
 ```
 
 | Arquivo | Faz |
@@ -113,8 +123,14 @@ tests/run_tests.gd     testes headless
 | `scripts/entities/court.gd` | quadra, rede, antenas |
 | `scripts/ui/markers.gd` | sombra, ponto de queda, anel, mira |
 | `scripts/ui/touch_controls.gd` | joystick flutuante + botão de ação |
-| `scripts/ui/hud.gd` | placar, rally, feedback |
+| `scripts/ui/hud.gd` | placar, sets, selos, faixas, feedback, botão de pausa |
+| `scripts/core/match_rules.gd` | pontos e sets (15, vantagem de 2, melhor de 3) |
+| `scripts/core/match_stats.gd` | estatísticas da partida (pelos sinais do Game) |
+| `scripts/core/save_data.gd` | progresso, recordes e opções em `user://save.cfg` |
+| `scripts/app/app.gd` | título → escolha → tutorial → partida → resultado |
+| `scripts/tutorial/tutorial_director.gd` | os 3 passos do tutorial |
+| `scripts/ui/e2e_hooks.gd` | só na Web: posições dos botões para o e2e |
 
-## Fora da Fase 0 (de propósito)
+## Próximas fases
 
-Partida em sets, telas e save → Fase 1 · bloqueio, peixinho, stamina e tipos de saque → Fase 2 · 2v2 → Fase 3 · arte e som → Fase 4. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).
+Bloqueio, peixinho, stamina e tipos de saque → Fase 2 · 2v2 → Fase 3 · arte e som → Fase 4. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).

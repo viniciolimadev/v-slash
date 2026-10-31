@@ -15,6 +15,9 @@ var _reticle: MeshInstance3D
 var _reticle_label: Label3D
 var _magnet_labels: Array[Label3D] = []
 var _magnet_dots: Array[MeshInstance3D] = []
+var _hl_dot: MeshInstance3D
+var _hl_label: Label3D
+var _hl_name := ""
 
 
 func setup(g: Game, h: Player) -> void:
@@ -40,7 +43,17 @@ func setup(g: Game, h: Player) -> void:
 		_magnet_labels.append(l)
 		# ponto no chão de cada zona de mira (o escolhido fica amarelo)
 		_magnet_dots.append(_disk(0.3, _flat(Color(1.0, 1.0, 1.0, 0.45))))
+	_hl_dot = _disk(0.45, _flat(Color(0.3, 1.0, 0.45, 0.7)))
+	_hl_label = _label(56)
+	_hl_label.pixel_size = 0.011
+	_hl_label.modulate = Color(0.4, 1.0, 0.5)
+	add_child(_hl_label)
 	refresh()
+
+
+## Tutorial: destaca uma zona de saque/ataque pelo nome ("" apaga).
+func highlight_zone(zone: String) -> void:
+	_hl_name = zone
 
 
 func refresh() -> void:
@@ -57,6 +70,19 @@ func refresh() -> void:
 	# ponto de queda (se ninguém tocar)
 	_land.visible = flying
 	_land.position = Vector3(game.land_point.x, 0.02, game.land_point.z)
+
+	# zona destacada (tutorial)
+	_hl_dot.visible = false
+	_hl_label.visible = false
+	if _hl_name != "":
+		for m in game.aim_magnets(human, Game.Act.SERVE):
+			if str(m["name"]) == _hl_name:
+				var hp: Vector3 = m["pos"]
+				_hl_dot.position = Vector3(hp.x, 0.025, hp.z)
+				_hl_label.position = Vector3(hp.x, 0.6, hp.z)
+				_hl_label.text = _hl_name
+				_hl_dot.visible = true
+				_hl_label.visible = true
 
 	# anel de timing: só quando a bola é sua
 	var plan := game.plan

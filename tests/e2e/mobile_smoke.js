@@ -1,6 +1,8 @@
 // Teste de ponta a ponta no navegador, emulando um celular na horizontal com toque.
-// Abre a versão Web, arrasta o analógico, aperta o botão de ação e confere
-// (pelos pixels da tela) que o jogador azul realmente se moveu.
+// Abre a versão Web e percorre título → escolha do bot → tutorial (pular) → partida;
+// na partida arrasta o analógico, saca e confere (pelos pixels da tela) que o jogador
+// azul realmente se moveu; depois pausa e sai para o menu.
+// O jogo publica a tela atual e a posição dos botões em window.__vs (scripts/ui/e2e_hooks.gd).
 //
 //   node tests/e2e/mobile_smoke.js <url-ou-pasta-export/web> [pasta-dos-prints]
 //
@@ -92,8 +94,40 @@ async function playerCenter(decoder, png) {
     return playerCenter(decoder, png);
   };
 
-  const p0 = await shot('0-inicio');
-  check(p0 !== null, 'jogo carregou e o jogador aparece na tela');
+  // toca no botão que o jogo publicou com esta chave (ex.: "title/play")
+  const tap = async (key) => {
+    const pos = await page.waitForFunction((k) => window.__vs && window.__vs[k], key, { timeout: 15000 })
+      .then((h) => h.jsonValue()).catch(() => null);
+    check(pos !== null, `botão ${key} na tela`);
+    if (!pos) return;
+    await touch('touchStart', [[pos.x, pos.y, 5]]);
+    await page.waitForTimeout(80);
+    await touch('touchEnd', []);
+    await page.waitForTimeout(300);
+  };
+  const screenIs = async (name) => {
+    const ok = await page.waitForFunction((n) => window.__vs && window.__vs.screen === n, name, { timeout: 15000 })
+      .then(() => true).catch(() => false);
+    check(ok, `tela "${name}"`);
+    return ok;
+  };
+
+  // menus
+  await screenIs('title');
+  await shot('0-titulo');
+  await tap('title/play');
+  await screenIs('level');
+  await shot('1-escolha-do-bot');
+  await tap('level/0');
+  await screenIs('tutorial');          // save novo: a 1ª partida passa pelo tutorial
+  await page.waitForTimeout(800);
+  await shot('2-tutorial');
+  await tap('tutorial/skip');
+  await screenIs('match');
+  await page.waitForTimeout(1500);
+
+  const p0 = await shot('3-partida');
+  check(p0 !== null, 'partida carregou e o jogador aparece na tela');
 
   // analógico: polegar na esquerda, arrasta para a direita e segura
   const jx = W * 0.15, jy = H * 0.75;
@@ -103,7 +137,7 @@ async function playerCenter(decoder, png) {
     await page.waitForTimeout(30);
   }
   await page.waitForTimeout(1200);
-  const p1 = await shot('1-analogico-direita');
+  const p1 = await shot('4-analogico-direita');
   await touch('touchEnd', []);
   const dx = p0 && p1 ? p1.x - p0.x : 0;
   check(dx > 15, `analógico para a direita move o jogador (${dx.toFixed(0)} px)`);
@@ -115,7 +149,7 @@ async function playerCenter(decoder, png) {
     await page.waitForTimeout(30);
   }
   await page.waitForTimeout(1200);
-  const p2 = await shot('2-analogico-esquerda');
+  const p2 = await shot('5-analogico-esquerda');
   await touch('touchEnd', []);
   const dx2 = p1 && p2 ? p2.x - p1.x : 0;
   check(dx2 < -15, `analógico para a esquerda move o jogador (${dx2.toFixed(0)} px)`);
@@ -126,10 +160,18 @@ async function playerCenter(decoder, png) {
   await page.waitForTimeout(300);
   await touch('touchMove', [[bx - 30, by - 20, 1]]);
   await page.waitForTimeout(300);
-  await shot('3-mirando');
+  await shot('6-mirando');
   await touch('touchEnd', []);
   await page.waitForTimeout(1500);
-  await shot('4-depois-do-saque');
+  await shot('7-depois-do-saque');
+
+  // pausa e volta ao menu
+  await tap('hud/pause');
+  await screenIs('pause');
+  await shot('8-pausa');
+  await tap('pause/quit');
+  await screenIs('title');
+  await shot('9-de-volta-ao-titulo');
 
   check(errors.length === 0, 'sem erros no console' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   console.log('prints em ' + outDir);
