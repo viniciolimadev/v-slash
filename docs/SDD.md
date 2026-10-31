@@ -120,7 +120,7 @@ Detalhados por fase na seção 9 e no ROADMAP: partida em sets, telas, save, tut
 > Exceção conhecida: `Game` referencia `Player` e `Ball` (nós de `entities/`) para posição e estado. Aceitável enquanto os dois forem finos; na Fase 3 avaliar extrair o estado de jogador para um objeto de dados.
 
 ### 4.2 Montagem
-`scenes/main.tscn` tem só o nó raiz com `main.gd`. Em `_ready` ele cria, nesta ordem: mapa de teclas → mundo (ambiente, luz, `Court`, câmera fixa) → partida (`Player` ×2, `Ball`, `Game`, `BotBrain`, `Markers`) → UI (`TouchControls` no CanvasLayer 1, `Hud` no CanvasLayer 2) e conecta sinais.
+Desde a Fase 1 a cena principal é `scenes/app.tscn` (roteador de telas, ver [SDD-fase-1](SDD-fase-1.md)); ela abre `scenes/main.tscn` para cada partida. `scenes/main.tscn` tem só o nó raiz com `main.gd`. Em `_ready` ele cria, nesta ordem: mapa de teclas → mundo (ambiente, luz, `Court`, câmera fixa) → partida (`Player` ×2, `Ball`, `Game`, `BotBrain`, `Markers`) → UI (`TouchControls` no CanvasLayer 1, `Hud` no CanvasLayer 2) e conecta sinais.
 
 ### 4.3 Laço de frame
 

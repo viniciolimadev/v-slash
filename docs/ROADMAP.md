@@ -12,7 +12,9 @@ Regras para todas as fases:
 
 ---
 
-## Fase 1 — Partida de verdade (1v1)
+## Fase 1 — Partida de verdade (1v1) ✅
+
+Concluída em 2026-10-31 (versão 0.2.0). Pendente: duração média medida 7,8 min contra a meta de 4–7 (ver SDD-fase-1, RNF-1.01).
 
 **Meta:** sair do "rally infinito" e virar uma partida com começo, meio e fim, que dá vontade de pedir revanche.
 Design detalhado: [SDD-fase-1.md](SDD-fase-1.md).
