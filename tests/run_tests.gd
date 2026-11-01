@@ -20,6 +20,8 @@ func _run() -> void:
 	_test_camera()
 	print("== bot x bot (20 min simulados) ==")
 	_test_bot_vs_bot()
+	print("== bot x bot: mecânicas da Fase 2 (Médio x Difícil, 15 min) ==")
+	_test_bot_mechanics()
 	print("== humano roteirizado: aperta, mira e solta no tempo ==")
 	_test_scripted_human()
 	print("== controles de toque ==")
@@ -186,6 +188,51 @@ func _test_bot_vs_bot() -> void:
 	_check(rallies.size() > 40, "partida anda (pontos saem)")
 	_check(float(stats["gap"]) < 8.0, "nunca trava (sempre há toque ou ponto em < 8 s)")
 	_check(float(total) / count >= 3.0, "bot devolve bola (média >= 3 toques)")
+	_free_main(main)
+
+
+func _test_bot_mechanics() -> void:
+	var main := _make_main(true)
+	var game: Game = main.get("game")
+	game.set_bot_level(2)                   # time 1 = Difícil; o time 0 (autoplay) é o Médio
+	game.rng.seed = 21
+	for b in game.bots:
+		b.rng.seed = 21 + b.p.team
+	var names := ["Médio", "Difícil"]
+	var use := [{}, {}]
+	var stats := {"last": 0.0, "gap": 0.0, "points": 0}
+	var mark := func() -> void:
+		stats["gap"] = maxf(float(stats["gap"]), game.time - float(stats["last"]))
+		stats["last"] = game.time
+	game.served.connect(func(p: Player, kind: int, _g: String) -> void:
+		var k: String = ServeType.NAMES[kind]
+		use[p.team][k] = int(use[p.team].get(k, 0)) + 1
+		mark.call())
+	game.action_used.connect(func(p: Player, act: int) -> void:
+		var k: String = Game.ACT_LABELS[act]
+		use[p.team][k] = int(use[p.team].get(k, 0)) + 1)
+	game.touch_made.connect(func(p: Player, _g: String, _q: float) -> void:
+		if game.last_kind == Game.Act.BLOCK and game.last_team == p.team:
+			use[p.team]["MÃOS"] = int(use[p.team].get("MÃOS", 0)) + 1
+		mark.call())
+	game.point_scored.connect(func(_t: int, _w: String) -> void:
+		stats["points"] += 1
+		mark.call())
+	for _i in int(900.0 / DT):
+		game.tick(DT)
+	for team in 2:
+		print("  %-7s %s" % [names[team], use[team]])
+	print("  pontos=%d  placar=%d x %d  maior tempo sem evento=%.1f s" % [
+			stats["points"], game.rules.points[0], game.rules.points[1], stats["gap"]])
+	var want := [["FLUTUANTE", "BLOQUEAR", "LARGAR", "PEIXINHO"],
+			["FLUTUANTE", "VIAGEM", "BLOQUEAR", "LARGAR", "PEIXINHO"]]
+	for team in 2:
+		var missing := []
+		for k in want[team]:
+			if int(use[team].get(k, 0)) == 0:
+				missing.append(k)
+		_check(missing.is_empty(), "%s usa as mecânicas novas (faltou: %s)" % [names[team], missing])
+	_check(float(stats["gap"]) < 8.0, "com bloqueio, saque com lançamento e peixinho, nunca trava")
 	_free_main(main)
 
 

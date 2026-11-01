@@ -14,7 +14,7 @@ Jogo de vôlei para celular em **Godot 4.7 / GDScript**, renderer Compatibility 
 | [docs/SDD.md](docs/SDD.md) | arquitetura, invariantes, ADRs, decisões de produto (como) |
 | `docs/SDD-fase-N.md` | design de implementação da fase atual — **a fonte da verdade para a tarefa** |
 
-Fase atual: **Fase 1 concluída** ([docs/SDD-fase-1.md](docs/SDD-fase-1.md)); a **Fase 2** começa escrevendo `docs/SDD-fase-2.md`.
+Fase atual: **Fase 2 implementada** ([docs/SDD-fase-2.md](docs/SDD-fase-2.md); falta o teste no celular); a **Fase 3** segue [docs/SDD-fase-3.md](docs/SDD-fase-3.md).
 
 ## Mapa do código
 

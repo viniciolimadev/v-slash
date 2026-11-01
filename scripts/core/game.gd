@@ -225,6 +225,14 @@ func _reveal(fake: Vector3, real: Vector3, t_event: float) -> Vector3:
 	return fake.lerp(real, k)
 
 
+## Tem alguém do outro time perto da rede, em posição de bloquear um ataque de `team`?
+func blocker_near(team: int) -> bool:
+	for p in players:
+		if p.team != team and absf(p.position.z) <= Tuning.BLOCK_ZONE:
+			return true
+	return false
+
+
 func opponent_of(team: int) -> Player:
 	for p in players:
 		if p.team != team:

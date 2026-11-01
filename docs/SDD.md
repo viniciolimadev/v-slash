@@ -143,11 +143,13 @@ Toda a lógica roda em `_physics_process` (passo fixo); `_process` só desenha. 
 ### 4.4 Máquina de estados do rally
 
 ```
-            attempt_hit (sacador)
-SERVE_WAIT ───────────────────────▶ PLAY
-    ▲                                 │ _award (chão, fora, antena)
-    │   _pause_t = 1,8 s esgota       ▼
-    └────────────────────────── POINT_PAUSE
+            attempt_hit (sacador, POR BAIXO)
+SERVE_WAIT ───────────────────────────────────▶ PLAY
+    │  start_serve (FLUTUANTE/VIAGEM)             ▲   │ _award (chão, fora, antena)
+    └──────────▶ SERVE_TOSS ──(toque no anel)─────┘   │
+                     │ bola lançada cai: "Saque perdido"
+    ▲                ▼                                ▼
+    └── _pause_t = 1,8 s esgota ─────────────── POINT_PAUSE
 ```
 
 Contador de toques: `last_team` + `touches`. Saque grava `touches = 3` para o sacador não tocar de novo antes de a bola cruzar. Ao trocar de lado, `n = 1`; no mesmo lado `n = touches + 1`; `n > 3` → sem plano, a bola cai.
@@ -320,6 +322,8 @@ Detalhamento completo (assinaturas, telas, testes, ordem dos PRs): [SDD-fase-1.m
 ### 9.2 Fase 2 — Profundidade
 
 Detalhamento completo: [SDD-fase-2.md](SDD-fase-2.md). Onde os dois divergirem, vale o detalhado.
+
+**Implementada** (versão 0.3.0). O que mudou em relação ao esboço abaixo está nas "Decisões assumidas" B-1…B-26 do SDD da fase: largada pela zona curta da mira (não por arraste), peixinho automático (não por gesto), bloqueio que **não** conta como toque, mãos do bloqueio do lado do atacante.
 
 | Mudança | Design |
 |---|---|

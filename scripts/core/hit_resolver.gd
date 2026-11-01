@@ -54,7 +54,7 @@ func resolve(game: Game, p: Player, act: int, aim: Vector3, q: float, cap: float
 		grav = Tuning.SPIKE_GRAVITY
 		v = BallSim.clear_net_velocity(from, to, maxf(dist / spd, 0.25), grav)
 	elif kind == Game.Act.DINK:
-		v = _dink_velocity(from, Vector3(target.x, Tuning.BALL_RADIUS, target.z))
+		v = _dink_velocity(from, Vector3(target.x, Tuning.BALL_RADIUS, target.z), game.blocker_near(p.team))
 	else:
 		var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
 		v = BallSim.clear_net_velocity(from, to, Tuning.T_FREEBALL)
@@ -67,13 +67,16 @@ func resolve(game: Game, p: Player, act: int, aim: Vector3, q: float, cap: float
 	return shot
 
 
-## Largada: bola lenta que passa a rede (e as mãos de quem bloqueia) acima do alcance do bloqueio.
-func _dink_velocity(from: Vector3, to: Vector3) -> Vector3:
+## Largada: bola curta e lenta. Com alguém na rede para bloquear, sobe para passar a rede
+## (e as mãos) acima do alcance do bloqueio; sem bloqueio, só passa a rede.
+func _dink_velocity(from: Vector3, to: Vector3, over_block: bool) -> Vector3:
 	var need := Tuning.NET_HEIGHT + Tuning.BLOCK_REACH + Tuning.DINK_APEX_MARGIN
 	var hands_z := signf(from.z) * Tuning.BLOCK_DEPTH
 	var t := Tuning.T_DINK
 	var v := BallSim.clear_net_velocity(from, to, t)
 	for _i in 40:
+		if not over_block:
+			break
 		var low := minf(BallSim.height_at_net(from, v), BallSim.height_at_z(from, v, hands_z))
 		if low >= need:
 			break

@@ -4,7 +4,7 @@ Complementa o [SDD geral](SDD.md) (seção 9.2) e o [ROADMAP](ROADMAP.md). Desig
 
 | | |
 |---|---|
-| Versão | 1.0 — 2026-10-31 |
+| Versão | 1.1 — 2026-10-31 (implementada; ver seção 9) |
 | Base | Fase 1 concluída (PR #11, versão 0.2.0) |
 | Versão ao fim da fase | 0.3.0 |
 | Decisões que valem aqui | DP-01 (3 toques no 1v1), DP-03 (stamina atrás de flag) |
@@ -376,3 +376,27 @@ Depois da fatia: rodar a simulação de equilíbrio (tabela do README em % de po
 | B-21 | O peixinho vale para quem tem `Player.can_dive` (humano sempre; bot a partir do Médio): sem atalho de regra, é um atributo do jogador como a velocidade | parâmetro no `attempt_hit` |
 | B-22 | Ímãs e limites da mira usam a ação do plano durante o PEIXINHO (`Game.aim_act`): a recepção de peixinho continua grudando no levantador | ímãs próprios do peixinho |
 | B-23 | A flag é a constante `Tuning.STAMINA_ENABLED`, copiada para `Game.stamina_on` (os testes ligam com `set_stamina(true)`); a recuperação em jogo só corre com a bola em jogo (`PLAY`) | flag só em `Tuning` |
+| B-24 | Sem bloqueador na rede, a largada só passa a rede (rápida e curta); com bloqueador, sobe acima do alcance do bloqueio. Com a largada sempre alta, a bola lenta era fácil para o bot e a partida casual × Fácil passava de 9 min | sempre alta |
+| B-25 | Peixinho mais limitado que o esboço: `DIVE_REACH` 2,1 m (era 2,6) e `DIVE_Q_MAX` 0,35 (era 0,5, "qualidade sempre baixa" do ROADMAP). Com 2,6/0,5 a partida casual × Fácil ia a 9,9 min (48 sementes) | valores do esboço e meta de duração maior |
+| B-26 | Bot: cortada sempre além de `DINK_DIST` + 0,3 m (senão a mira curta viraria largada sem querer); o Difícil larga 25% quando você está no bloqueio e 10% quando não está | cortada curta continua possível |
+
+---
+
+## 10. Resultado (fim da fase)
+
+Simulação `tests/balance_sim.gd` (humano roteirizado: não bloqueia; o "bom" ataca longe das mãos do bot quando ele está na rede). Pontos: 4 × 20 min por célula. Partidas: casual × Fácil, 48 sementes.
+
+| | Fácil | Médio | Difícil |
+|---|---|---|---|
+| bom (Fase 1 → Fase 2) | 72% → 74% | 47% → **37%** | 16% → 22% |
+| casual (Fase 1 → Fase 2) | 50% → 50% | 34% → 26% | 13% → 14% |
+
+| Casual × Fácil, partidas inteiras | Fase 1 | Fase 2 |
+|---|---|---|
+| Vitórias | 52% | **46%** (RNF-2.02: 35–60% ✔) |
+| Duração média | 8,3 min (7,6 s/ponto) | **8,8 min** (8,3 s/ponto) (RNF-2.03: 6–9 ✔, com pouca folga) |
+
+**Em aberto:**
+- RNF-2.02 "bom × Médio perto de 50%": ficou em ~37–42% (ruído de ±4 pontos entre rodadas). O Médio ficou mais forte com flutuante, bloqueio, largada e peixinho; mexer em `BOT_POWER`/`BOT_TIMING_SIGMA`/`BOT_SPEED` do Médio não moveu o número além do ruído. Decidir no celular: aceitar, ou tirar o peixinho do Médio (chegou a 41–43% na simulação).
+- Duração: o teste do CI (8 sementes) dá 8,4 min; com 48 sementes, 8,8 min. Peixinho e largada alongam o rally (+0,7 s por ponto).
+- Critérios 5 e 6 (teste no celular, decisão da stamina) dependem do dono do projeto.

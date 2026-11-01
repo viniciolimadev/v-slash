@@ -32,7 +32,9 @@ Design detalhado: [SDD-fase-1.md](SDD-fase-1.md).
 
 ---
 
-## Fase 2 — Profundidade (1v1)
+## Fase 2 — Profundidade (1v1) ✅ (falta o teste no celular)
+
+Implementada em 2026-10-31 (versão 0.3.0): tipos de saque com timing, flutuante, bloqueio, largada, peixinho, stamina atrás de flag e bot usando tudo. Números e pendências: [SDD-fase-2.md, seção 10](SDD-fase-2.md#10-resultado-fim-da-fase).
 
 **Meta:** dar escolhas ao jogador além de "acertar o tempo": arriscar ou jogar seguro, atacar ou defender na rede.
 Design detalhado: [SDD-fase-2.md](SDD-fase-2.md).
@@ -40,7 +42,7 @@ Design detalhado: [SDD-fase-2.md](SDD-fase-2.md).
 | # | Fatia | Detalhe |
 |---|---|---|
 | 2.1 | Tipos de saque | **Por baixo** (seguro, lento) · **Viagem** (pulo, forte, janela de timing menor) · **Flutuante** (trajetória oscila: ponto de queda só fica certo perto do fim). Escolha antes de sacar. O preditor de `ball_sim.gd` precisa suportar o flutuante. |
-| 2.2 | Bloqueio | Quando o adversário vai atacar e você está perto da rede, o botão vira BLOQUEAR. Resultado pelo timing: ponto · amortece (bola fica do seu lado, conta como toque) · toca e sai. Bot aprende a bloquear e a atacar desviando do bloqueio. |
+| 2.2 | Bloqueio | Quando o adversário vai atacar e você está perto da rede, o botão vira BLOQUEAR. Resultado pelo timing: ponto · amortece (bola fica do seu lado; **não** conta como toque, B-4) · toca e sai. Bot aprende a bloquear e a atacar desviando do bloqueio. |
 | 2.3 | Ataque variado | **Largada** (bola curta por cima do bloqueio) além da cortada: mirar numa zona curta = largada (o botão mostra LARGAR). |
 | 2.4 | Peixinho | Bola um pouco fora do `REACH`: o toque vira peixinho sozinho (o botão mostra PEIXINHO), alcança mais, mas você fica no chão um tempo. Qualidade sempre baixa. |
 | 2.5 | Stamina (experimental) | Viagem, cortada forte e peixinho gastam; recupera entre pontos. Atrás de uma flag — entra só se o teste no celular mostrar que melhora a decisão sem frustrar. |
