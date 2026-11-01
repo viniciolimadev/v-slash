@@ -1,6 +1,12 @@
 class_name Player
 extends Node3D
-## Jogador: anda (joystick ou bot), pula sozinho no ataque, mergulha no peixinho e anima o toque.
+## Jogador (lógica): anda (joystick ou bot), pula sozinho no ataque e mergulha no peixinho.
+## Não desenha nada: a PlayerView (filha) observa o estado e os sinais (ADR-09).
+
+## Toque, saque, bloqueio ou tentativa (kind = Game.Act); contact_t no relógio do Game.
+signal swung(kind: int, contact_t: float)
+## Anel no pé mudou (ver set_ring).
+signal ring_changed(kind: int, pulse: bool)
 
 var team := 0
 var is_human := false
@@ -18,38 +24,17 @@ var diving_t := 0.0                 # s que ainda faltam no chão depois do peix
 var stamina := 1.0                  # 0..1; só vale com Game.stamina_on (Tuning.STAMINA_ENABLED)
 var stamina_on := false
 var court := CourtSpec.default_spec()
+var color := Color.WHITE            # cor do time (a view usa no uniforme e no anel)
+var ring_kind := 0                  # ver set_ring
 
 var _jump_t := -1.0
 var _jump_target := Vector3.ZERO
-var _body: Node3D
-var _arms: Node3D
-var _swing_tw: Tween
-var _color := Color.WHITE
-var _ring_full: MeshInstance3D = null
-var _ring_thin: MeshInstance3D = null
 
 
-func setup(p_team: int, p_human: bool, color: Color) -> void:
+func setup(p_team: int, p_human: bool, p_color: Color) -> void:
 	team = p_team
 	is_human = p_human
-	_color = color
-	_body = Node3D.new()
-	add_child(_body)
-	_body.rotation.y = 0.0 if team == 0 else PI
-	var torso := CapsuleMesh.new()
-	torso.radius = 0.28
-	torso.height = 1.75
-	_add_mesh(_body, torso, Vector3(0.0, 0.875, 0.0), color)
-	var nose := BoxMesh.new()
-	nose.size = Vector3(0.16, 0.1, 0.24)
-	_add_mesh(_body, nose, Vector3(0.0, 1.52, -0.3), color.darkened(0.5))
-	_arms = Node3D.new()
-	_arms.position = Vector3(0.0, 1.38, 0.0)
-	_body.add_child(_arms)
-	for sx: float in [-0.36, 0.36]:
-		var arm := BoxMesh.new()
-		arm.size = Vector3(0.11, 0.64, 0.11)
-		_add_mesh(_arms, arm, Vector3(sx, -0.32, 0.0), color.lightened(0.3))
+	color = p_color
 	if is_human:
 		set_ring(2, false)
 
@@ -57,21 +42,8 @@ func setup(p_team: int, p_human: bool, color: Color) -> void:
 ## Anel no pé: 0 = nenhum, 1 = fino (seu parceiro no 2v2), 2 = cheio (quem você controla).
 ## pulse = pulso rápido para mostrar que o controle chegou neste jogador.
 func set_ring(kind: int, pulse: bool = true) -> void:
-	if _ring_full == null:
-		# anel no pé para você se achar rápido
-		var full := TorusMesh.new()
-		full.inner_radius = 0.42
-		full.outer_radius = 0.5
-		_ring_full = _add_mesh(self, full, Vector3(0.0, 0.03, 0.0), _color.lightened(0.35))
-		var thin := TorusMesh.new()
-		thin.inner_radius = 0.46
-		thin.outer_radius = 0.49
-		_ring_thin = _add_mesh(self, thin, Vector3(0.0, 0.03, 0.0), _color.lightened(0.2))
-	_ring_full.visible = kind == 2
-	_ring_thin.visible = kind == 1
-	if kind == 2 and pulse:
-		_ring_full.scale = Vector3(1.6, 1.0, 1.6)
-		create_tween().tween_property(_ring_full, "scale", Vector3.ONE, 0.15)
+	ring_kind = kind
+	ring_changed.emit(kind, pulse)
 
 
 func reset_state() -> void:
@@ -84,8 +56,6 @@ func reset_state() -> void:
 	diving_t = 0.0
 	_jump_t = -1.0
 	position.y = 0.0
-	if _body != null:
-		_body.rotation.x = 0.0
 
 
 func step(dt: float) -> void:
@@ -121,13 +91,6 @@ func step(dt: float) -> void:
 		position += vel * dt
 	_clamp_to_court()
 	position.y = _jump_offset()
-	if _body != null:
-		_body.rotation.x = -deg_to_rad(80.0) * _dive_tilt()
-	var look := look_target - position
-	look.y = 0.0
-	if look.length() > 0.05 and _body != null:
-		var yaw := atan2(-look.x, -look.z)
-		_body.rotation.y = lerp_angle(_body.rotation.y, yaw, minf(1.0, 12.0 * dt))
 
 
 ## Passo rápido em direção à bola no instante do toque (disfarça o alcance assistido).
@@ -157,7 +120,7 @@ func is_diving() -> bool:
 
 
 ## 0 = em pé, 1 = deitado: deita rápido e levanta no fim do tempo no chão.
-func _dive_tilt() -> float:
+func dive_tilt() -> float:
 	if diving_t <= 0.0:
 		return 0.0
 	var elapsed := Tuning.DIVE_RECOVER - diving_t
@@ -195,25 +158,9 @@ func start_jump(target: Vector3) -> void:
 	_jump_target = Vector3(target.x, 0.0, target.z)
 
 
-func swing(kind: int) -> void:
-	if _arms == null:
-		return
-	if _swing_tw != null and _swing_tw.is_valid():
-		_swing_tw.kill()
-	_swing_tw = create_tween()
-	var peak := 1.2                         # manchete: braços à frente
-	if kind == Game.Act.SET_BALL or kind == Game.Act.BLOCK or kind == Game.Act.DINK:
-		peak = 2.9                          # toque, bloqueio e largada: braços para cima
-	elif kind == Game.Act.ATTACK:
-		_arms.rotation.x = 3.0
-		peak = 0.5                          # cortada: de cima para baixo
-	elif kind == Game.Act.SERVE:
-		peak = 1.7
-	_swing_tw.tween_property(_arms, "rotation:x", peak, 0.07)
-	_swing_tw.tween_property(_arms, "rotation:x", 0.0, 0.3).set_delay(0.08)
-	var pop := create_tween()
-	pop.tween_property(_body, "scale", Vector3(1.12, 0.92, 1.12), 0.05)
-	pop.tween_property(_body, "scale", Vector3.ONE, 0.18)
+## Avisa a view (e o som) que houve um toque agora (contact_t no relógio do Game).
+func swing(kind: int, contact_t: float) -> void:
+	swung.emit(kind, contact_t)
 
 
 func _clamp_to_court() -> void:
@@ -237,13 +184,3 @@ func _jump_offset() -> float:
 	var u := clampf(_jump_t / (Tuning.JUMP_TIME_UP * 2.0), 0.0, 1.0)
 	return 4.0 * jump_height() * u * (1.0 - u)
 
-
-func _add_mesh(parent: Node3D, mesh: Mesh, pos: Vector3, color: Color) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.position = pos
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mi.material_override = mat
-	parent.add_child(mi)
-	return mi

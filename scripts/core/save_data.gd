@@ -3,7 +3,7 @@ extends RefCounted
 ## Progresso, recordes e opções em user://save.cfg (ConfigFile versionado).
 ## Arquivo ausente ou ilegível = valores padrão; nunca derruba o jogo.
 
-const VERSION := 3                  # 2: tipo de saque (Fase 2); 3: progresso e recordes por modo (Fase 3)
+const VERSION := 4                  # 2: tipo de saque (F2); 3: progresso por modo (F3); 4: volumes (F4)
 const DEFAULT_PATH := "user://save.cfg"
 const AIM_SENS_MIN := 0.5
 const AIM_SENS_MAX := 2.0
@@ -27,6 +27,8 @@ var aim_sens := 1.0                 # multiplicador de Tuning.AIM_SENS
 var left_handed := false
 var vibration := true
 var serve_type := ServeType.Kind.UNDER   # último tipo de saque escolhido
+var music_vol := 0.8                # 0..1 (barramento Music)
+var sfx_vol := 1.0                  # 0..1 (barramento SFX)
 
 
 func _init(p_path := DEFAULT_PATH) -> void:
@@ -54,6 +56,9 @@ func load_file() -> void:
 	vibration = bool(cfg.get_value("options", "vibration", true))
 	# save versão 1 não tem o campo: fica o padrão
 	serve_type = clampi(_int(cfg, "options", "serve_type", ServeType.Kind.UNDER), 0, ServeType.NAMES.size() - 1)
+	# saves até a versão 3 não têm volume: ficam os padrões
+	music_vol = _unit(cfg, "music_vol", 0.8)
+	sfx_vol = _unit(cfg, "sfx_vol", 1.0)
 
 
 ## Grava num arquivo temporário e troca de nome: um desligamento no meio não corrompe o save.
@@ -73,6 +78,8 @@ func save_file() -> Error:
 	cfg.set_value("options", "left_handed", left_handed)
 	cfg.set_value("options", "vibration", vibration)
 	cfg.set_value("options", "serve_type", serve_type)
+	cfg.set_value("options", "music_vol", music_vol)
+	cfg.set_value("options", "sfx_vol", sfx_vol)
 	var tmp := path + ".tmp"
 	var err := cfg.save(tmp)
 	if err != OK:
@@ -119,6 +126,11 @@ func _key(cfg: ConfigFile, sec: String, key: String, suffix: String, legacy: boo
 func _int(cfg: ConfigFile, sec: String, key: String, default: int) -> int:
 	var v: Variant = cfg.get_value(sec, key, default)
 	return int(v) if (v is int or v is float) else default
+
+
+func _unit(cfg: ConfigFile, key: String, default: float) -> float:
+	var v: Variant = cfg.get_value("options", key, default)
+	return clampf(float(v), 0.0, 1.0) if (v is int or v is float) else default
 
 
 func _int_array(cfg: ConfigFile, sec: String, key: String) -> Array[int]:

@@ -16,6 +16,16 @@ func _initialize() -> void:
 func _run() -> void:
 	print("== física da bola ==")
 	_test_physics()
+	print("== views não mudam a lógica (ADR-09) ==")
+	_test_views_do_not_change_logic()
+	print("== animação sincronizada com o contato ==")
+	_test_anim_sync()
+	print("== efeitos ==")
+	_test_fx()
+	print("== sons ==")
+	_test_sfx_events()
+	print("== orçamento de desenho e medidor de fps ==")
+	_test_render_budget()
 	print("== câmera (enquadramento) ==")
 	_test_camera()
 	print("== bot x bot (20 min simulados) ==")
@@ -27,7 +37,7 @@ func _run() -> void:
 	print("== controles de toque ==")
 	_test_touch_controls()
 	print("== HUD (layout) ==")
-	_test_hud_layout()
+	await _test_hud_layout()
 	print("== mira ==")
 	_test_aim()
 	print("== assistência de mira ==")
@@ -74,6 +84,8 @@ func _run() -> void:
 	_test_left_handed()
 	print("== tutorial ==")
 	_test_tutorial()
+	print("== tema: alvos de toque ==")
+	_test_theme_targets()
 	print("== fluxo de telas (App) ==")
 	_test_app_flow()
 	print("== duração: humano casual x Fácil ==")
@@ -149,6 +161,222 @@ func _test_physics() -> void:
 	var d := BallSim.find_descent(up.predict(), Tuning.H_SET, 1.0)
 	_check(not d.is_empty() and absf(float(d["t"]) - Tuning.T_RECEIVE) < 0.01,
 			"preditor acha o ponto de contato do levantamento")
+
+
+## Mesmas sementes com e sem views (--no-views): a partida tem de sair idêntica.
+func _test_views_do_not_change_logic() -> void:
+	for two in [false, true]:
+		var traces: Array[String] = []
+		for with_views in [true, false]:
+			var cfg := MatchConfig.new()
+			if two:
+				cfg.mode = MatchConfig.Mode.TWO_V_TWO
+			var main: Node = load("res://scenes/main.tscn").instantiate()
+			main.set("autoplay", true)
+			main.set("views", with_views)
+			main.set("config", cfg)
+			root.add_child(main)
+			var game: Game = main.get("game")
+			game.rng.seed = 77
+			for b in game.bots:
+				b.rng.seed = 100 + game.players.find(b.p)
+			var log: PackedStringArray = []
+			game.point_scored.connect(func(team: int, why: String) -> void:
+				log.append("%d %s %d %.3f %s" % [team, why, game.rally_touches, game.time, game.ball.position.snapped(Vector3.ONE * 0.001)]))
+			for _i in int(300.0 / DT):
+				game.tick(DT)
+			var has_view := game.players[0].get_child_count() > 0
+			_check(has_view == with_views, "%s: views %s" % ["2v2" if two else "1v1", "presentes" if with_views else "ausentes (--no-views)"])
+			traces.append("\n".join(log))
+			_free_main(main)
+		var n := traces[0].count("\n") + 1
+		_check(traces[0] == traces[1] and n > 20, "%s: 5 min bot x bot iguais com e sem views (%d pontos)" % ["2v2" if two else "1v1", n])
+
+
+func _model_view(p: Player) -> PlayerViewModel:
+	for c in p.get_children():
+		if c is PlayerViewModel:
+			return c
+	return null
+
+
+## RF-4.02: o clipe agendado põe a mão na bola em plan.t (± 1 quadro); toque cedo mistura, não salta.
+func _test_anim_sync() -> void:
+	var main := _make_main(true)
+	var game: Game = main.get("game")
+	game.set_bot_level(2)                   # o Difícil saca flutuante e viagem (anel de saque)
+	game.rng.seed = 5
+	var worst := {}
+	var seen := -1
+	for _i in int(240.0 / DT):
+		game.tick(DT)
+		if game.plan == null or game.plan_id == seen or game.plan.player == null:
+			continue
+		seen = game.plan_id
+		var v := _model_view(game.plan.player)
+		v.sync_plan()
+		var clip := AnimTable.clip_for(game.plan.act, game.serve_type[game.plan.team])
+		var err := absf(v.shot_start + AnimTable.contact(clip) - game.plan.t)
+		worst[clip] = maxf(float(worst.get(clip, 0.0)), err)
+	print("  pior erro por clipe (s): %s" % worst)
+	var ok := worst.size() >= 4
+	for k in worst:
+		ok = ok and float(worst[k]) <= 1.0 / 60.0
+	_check(ok, "manchete, toque, cortada e saque com lançamento: contato no tempo ideal ± 1 quadro (%d clipes)" % worst.size())
+	# toque 0,1 s antes do ideal: o clipe se corrige com mistura curta, sem salto de pose
+	var p: Player = game.players[0]
+	var v := _model_view(p)
+	game.plan = ContactPlan.new(p.team, 1, Game.Act.SET_BALL, game.time + 0.25, p.position + Vector3(0, 2.2, 0), p)
+	game.plan_id += 1
+	v.sync_plan()
+	var jump := 0.0
+	var before := {}
+	for i in 20:
+		game.time += DT
+		if i == 8:
+			v._on_swung(Game.Act.SET_BALL, game.time)
+		v._animate(DT)
+		if i >= 8 and i <= 10:
+			jump = maxf(jump, AnimTable.distance(before, v.pose))
+		before = v.pose
+	_check(absf(v.shot_start + AnimTable.contact("set") - (game.time - 11 * DT)) < 1e-4,
+			"toque cedo move o contato do clipe para o instante real")
+	var naive := AnimTable.distance(AnimTable.sample("set", 0.3 - 7 * DT), AnimTable.sample("set", 0.3))
+	_check(jump < 10.0 and naive > 30.0, "e a pose não salta: %.1f° no quadro da correção (sem mistura: %.1f°)" % [jump, naive])
+	_free_main(main)
+
+
+func _test_fx() -> void:
+	var main := _make_main(true)
+	var game: Game = main.get("game")
+	var fx: Fx = main.get("fx")
+	var cam: Camera3D = main.get("cam")
+	var rest := cam.global_transform
+	var seen := {"attack_trail": 0, "attacks": 0, "shake": 0, "sand": 0}
+	game.touch_made.connect(func(_p: Player, _g: String, _q: float) -> void:
+		if game.last_kind == Game.Act.ATTACK:
+			seen["attacks"] += 1
+			if fx.trail_on:
+				seen["attack_trail"] += 1
+			if fx.camera_fx.amp > 0.0:
+				seen["shake"] += 1)
+	game.ball_event.connect(func(kind: int, _pos: Vector3) -> void:
+		if kind == BallSim.Ev.LAND:
+			seen["sand"] += 1)
+	for _i in int(120.0 / DT):
+		game.tick(DT)
+	print("  %s  brilhos de PERFEITO=%d" % [seen, fx.bursts])
+	_check(seen["attacks"] > 0 and seen["attack_trail"] == seen["attacks"], "toda cortada liga o rastro")
+	_check(seen["shake"] > 0 and fx.camera_fx.amp <= Tuning.SHAKE_AMP, "cortada treme a câmera (até SHAKE_AMP)")
+	_check(fx.bursts > 0 and seen["sand"] > 0, "PERFEITO brilha no chão e a bola levanta areia")
+	_check(cam.global_transform == rest, "o tremor não mexe no enquadramento (só h/v_offset)")
+	_free_main(main)
+
+
+## Cada sinal do Game pede um som que existe; o toque varia por ação e grau.
+func _test_sfx_events() -> void:
+	var main := _make_main(true)
+	var game: Game = main.get("game")
+	var sfx: Sfx = main.get("sfx")
+	var heard: Array[String] = []
+	sfx.sink = func(n: String, _db: float) -> void: heard.append(n)
+	var p: Player = game.players[0]
+	var cases := [
+		["toque (manchete perfeita)", func() -> void:
+			game.last_kind = Game.Act.RECEIVE
+			game.touch_made.emit(p, "PERFEITO!", 1.0), "bump_perfect"],
+		["toque (cortada ruim)", func() -> void:
+			game.last_kind = Game.Act.ATTACK
+			game.touch_made.emit(p, "CEDO", 0.35), "spike_bad"],
+		["levantamento bom", func() -> void:
+			game.last_kind = Game.Act.SET_BALL
+			game.touch_made.emit(p, "BOM", 0.7), "set_good"],
+		["bloqueio", func() -> void:
+			game.last_kind = Game.Act.BLOCK
+			game.touch_made.emit(p, "BOM", 0.7), "block"],
+		["saque", func() -> void:
+			game.last_kind = Game.Act.SERVE
+			game.touch_made.emit(p, "SAQUE", 0.9), "serve"],
+		["tentativa sem bola", func() -> void: game.whiffed.emit(p, "CEDO"), "whiff"],
+		["rede", func() -> void: game.ball_event.emit(BallSim.Ev.NET, Vector3.ZERO), "net"],
+		["antena", func() -> void: game.ball_event.emit(BallSim.Ev.ANTENNA, Vector3.ZERO), "antenna"],
+		["bola no chão", func() -> void: game.ball_event.emit(BallSim.Ev.LAND, Vector3.ZERO), "land"],
+		["peixinho", func() -> void: game.action_used.emit(p, Game.Act.DIVE), "dive"],
+		["ponto", func() -> void: game.point_scored.emit(0, "Fora"), "whistle"],
+		["fim de set", func() -> void: game.set_over.emit(0, 0, Vector2i(15, 10)), "whistle_long"],
+		["fim de partida", func() -> void: game.match_over.emit(0), "match_win"],
+	]
+	var missing: Array[String] = []
+	for c in cases:
+		heard.clear()
+		(c[1] as Callable).call()
+		if not (c[2] in heard):
+			missing.append(str(c[0]))
+	_check(missing.is_empty(), "todo evento do jogo pede o seu som (faltou: %s)" % [missing])
+	var files: Array[String] = []
+	for n in sfx.requests:
+		if sfx.stream(n) == null:
+			files.append(n)
+	_check(files.is_empty() and sfx.requests.size() >= cases.size(), "todo som pedido existe em assets/audio/sfx (sem arquivo: %s)" % [files])
+	_check(sfx.stream("crowd_loop") != null and ResourceLoader.exists("res://assets/audio/music/match.ogg")
+			and ResourceLoader.exists("res://assets/audio/music/menu.ogg"), "torcida contínua e as duas músicas existem")
+	_free_main(main)
+
+
+func _mesh_tris(m: Mesh) -> int:
+	var n := 0
+	if m == null:
+		return 0
+	for i in m.get_surface_count():
+		var arr := m.surface_get_arrays(i)
+		var idx: Variant = arr[Mesh.ARRAY_INDEX]
+		n += (idx as PackedInt32Array).size() / 3 if idx != null else (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+	return n
+
+
+## Soma chamadas de desenho (instâncias de geometria visíveis) e triângulos da cena.
+func _render_cost(n: Node, acc: Dictionary) -> Dictionary:
+	if n is Node3D and not (n as Node3D).is_visible_in_tree():
+		return acc
+	if n is MeshInstance3D and not ((n as MeshInstance3D).mesh is ImmediateMesh):
+		acc["draws"] += 1
+		acc["tris"] += _mesh_tris((n as MeshInstance3D).mesh)
+	elif n is MultiMeshInstance3D:
+		var mm := (n as MultiMeshInstance3D).multimesh
+		acc["draws"] += 1
+		acc["tris"] += mm.instance_count * _mesh_tris(mm.mesh)
+	elif n is CPUParticles3D:
+		acc["draws"] += 1
+		acc["tris"] += (n as CPUParticles3D).amount * 2
+	elif n is Label3D:
+		acc["draws"] += 1
+	for c in n.get_children():
+		_render_cost(c, acc)
+	return acc
+
+
+## RNF-4.02: ≤ 80 chamadas de desenho, ≤ 60 k triângulos, ≤ 5 k por personagem (pior caso: 2v2).
+func _test_render_budget() -> void:
+	var main := _make_main_2v2(true)
+	var game: Game = main.get("game")
+	for _i in int(3.0 / DT):
+		game.tick(DT)
+	var cost := _render_cost(main, {"draws": 0, "tris": 0})
+	var worst := 0
+	for p in game.players:
+		worst = maxi(worst, _model_view(p).tris)
+	print("  2v2: %d chamadas de desenho, %d triângulos, pior personagem %d tris, torcida %d pessoas" % [
+			cost["draws"], cost["tris"], worst, (main.get("court_view") as CourtView).crowd_count])
+	_check(int(cost["draws"]) <= 80 and int(cost["tris"]) <= 60000, "cena dentro do orçamento (≤ 80 chamadas, ≤ 60 k tris)")
+	_check(worst <= 5000, "personagem com ≤ 5 k triângulos")
+	_free_main(main)
+	var m := FpsMeter.new()
+	for i in 600:
+		m.add_frame(1.0 / 30.0 if i % 100 == 0 else 1.0 / 60.0)
+	m.measure()
+	_check(absf(m.avg - 600.0 / (594.0 / 60.0 + 6.0 / 30.0)) < 0.1 and absf(m.p1 - 30.0) < 0.1,
+			"medidor: fps médio %.1f e p1 %.1f (6 quadros lentos em 600)" % [m.avg, m.p1])
+	m.free()
 
 
 func _test_camera() -> void:
@@ -346,6 +574,9 @@ func _test_hud_layout() -> void:
 	_check(root.size.is_equal_approx(screen), "HUD ocupa a tela toda (%s)" % root.size)
 	_check(c.size.is_equal_approx(screen), "controles de toque ocupam a tela toda (%s)" % c.size)
 	var score := hud.get("_score") as Label
+	# a placa do placar se ajusta ao texto no quadro seguinte
+	await process_frame
+	await process_frame
 	_check(absf(score.get_global_rect().get_center().x - screen.x * 0.5) < 2.0, "placar centralizado")
 	var lvl := hud.get("_level_btn") as Button
 	var r := lvl.get_global_rect()
@@ -1369,6 +1600,25 @@ func _test_save() -> void:
 	fresh.record_result(duo)
 	_check(fresh.rec(1).unlocked_level == 1 and fresh.rec(1).wins[0] == 1 and fresh.rec(0).wins[0] == 2,
 			"vitória no 2v2 conta e libera só no 2v2")
+	# save da versão 3 (sem volumes): mantém tudo e cria os volumes padrão
+	var v3 := ConfigFile.new()
+	v3.set_value("meta", "version", 3)
+	v3.set_value("progress", "unlocked_level_2v2", 1)
+	v3.set_value("records", "wins_1v1", [2, 1, 0])
+	v3.set_value("progress", "tutorial_done", true)
+	v3.set_value("options", "aim_sens", 1.3)
+	v3.save(path)
+	r = SaveData.new(path)
+	r.load_file()
+	_check(r.rec(1).unlocked_level == 1 and r.rec(0).wins == [2, 1, 0] and r.tutorial_done and is_equal_approx(r.aim_sens, 1.3)
+			and is_equal_approx(r.music_vol, 0.8) and is_equal_approx(r.sfx_vol, 1.0),
+			"migração da versão 3: mantém tudo e cria volumes padrão")
+	r.music_vol = 0.25
+	r.sfx_vol = 0.0
+	r.save_file()
+	var r4 := SaveData.new(path)
+	r4.load_file()
+	_check(is_equal_approx(r4.music_vol, 0.25) and r4.sfx_vol == 0.0, "volumes de música e efeitos gravados (save v4)")
 	DirAccess.remove_absolute(path)
 
 
@@ -1488,6 +1738,55 @@ func _buttons(scr: Screen) -> Array[Button]:
 		if c is Button:
 			out.append(c)
 	return out
+
+
+func _all_controls(n: Node, out: Array[Control]) -> Array[Control]:
+	for c in n.get_children():
+		if c is Button or c is HSlider:
+			out.append(c)
+		_all_controls(c, out)
+	return out
+
+
+## RF-4.09: com o tema novo, todo botão e controle deslizante das telas tem ≥ 64 px de altura em 720p.
+func _test_theme_targets() -> void:
+	var path := "user://test_theme.cfg"
+	DirAccess.remove_absolute(path)
+	var app: Node = load("res://scenes/app.tscn").instantiate()
+	app.set("save", SaveData.new(path))
+	root.add_child(app)
+	_check(ThemeDB.get_default_theme().has_constant("installed", "UiTheme")
+			and ThemeDB.fallback_font is FontVariation, "tema e fonte do jogo instalados")
+	var small: Array[String] = []
+	var count := 0
+	var st := MatchStats.new()
+	var opens := {
+		"título": func() -> void: app.call("show_title"),
+		"escolha": func() -> void: app.call("show_level_select"),
+		"opções": func() -> void: app.call("show_options", func() -> void: pass),
+		"resultado": func() -> void: app.call("show_result", MatchResult.new(0, 0, [Vector2i(15, 9)], st)),
+	}
+	for k in opens:
+		(opens[k] as Callable).call()
+		for c in _all_controls(app.get("screen"), []):
+			count += 1
+			if c.get_combined_minimum_size().y < 64.0:
+				small.append("%s/%s" % [k, c.get("text") if c is Button else "slider"])
+	var pm := PauseMenu.new()
+	root.add_child(pm)
+	pm.open(true)
+	var main := _make_main_cfg(MatchConfig.from_save(SaveData.new(path), 0))
+	var hud: Hud = main.get("hud")
+	for c in _all_controls(pm, []) + [hud.get("_pause_btn")] + (hud.get("_serve_btns") as Array):
+		count += 1
+		if (c as Control).get_combined_minimum_size().y < 64.0:
+			small.append("pausa-hud/%s" % (c as Button).text)
+	_check(small.is_empty() and count >= 18, "%d alvos de toque com ≥ 64 px (menores: %s)" % [count, small])
+	_free_main(main)
+	pm.free()
+	root.remove_child(app)
+	app.free()
+	DirAccess.remove_absolute(path)
 
 
 func _test_app_flow() -> void:

@@ -40,9 +40,9 @@ class _PauseScreen extends Screen:
 
 	func _init() -> void:
 		screen_name = "pause"
+		dim = true
 
 	func _build() -> void:
-		(get_child(0) as ColorRect).color = Color(0.0, 0.0, 0.0, 0.6)
 		add_title("PAUSA", 52)
 		add_space(8.0)
 		add_button("CONTINUAR", "resume", func() -> void: menu.resume_pressed.emit())

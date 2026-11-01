@@ -4,7 +4,7 @@ Complementa o [SDD geral](SDD.md) (seção 9.4) e o [ROADMAP](ROADMAP.md).
 
 | | |
 |---|---|
-| Versão | 1.0 — 2026-10-31 |
+| Versão | 1.1 — 2026-11-01 (implementada; ver seções 9 e 10) |
 | Base | Fase 3 concluída (versão 0.4.0) |
 | Versão ao fim da fase | 0.5.0 |
 | Muda invariante | ADR-03 ("tudo por código") é substituída pela ADR-09 abaixo |
@@ -201,3 +201,30 @@ CREDITS.md
 | B4-3 | Luz "assada" nas texturas + 1 direcional sem sombra dinâmica (Compatibility) | LightmapGI |
 | B4-4 | Som e música CC0/CC-BY ou próprios | compor trilha |
 | B4-5 | Ícones no botão de ação **além** do texto (não no lugar) | só ícone |
+| B4-6 | **Arte gerada por código** e **áudio sintetizado** (`tools/gen_audio.py`): o ambiente não tem Blender nem Git LFS, e assim nada binário grande entra no repositório. Personagem = malhas low-poly presas a um `Skeleton3D` de 11 ossos (uma malha só, 1 chamada de desenho); quadra/props agrupados por `MeshKit` | Blender → glTF como no esboço (uma `PlayerView` nova com o mesmo contrato encaixa sem mexer na lógica) |
+| B4-7 | Clipes como **tabelas de pose** (`AnimTable`, 14 clipes, `contact` por clipe) e locomoção misturada na própria view (parado/corrida/lateral pela velocidade), sem `AnimationTree` | `AnimationTree` com BlendSpace2D |
+| B4-8 | Views são **classes** em `scripts/view/` (sem `scenes/views/*.tscn`); `main.gd` escolhe pela constante `Tuning.USE_MODEL_VIEWS` | cenas `.tscn` por view |
+| B4-9 | Tema montado em código (`UiTheme`) e **mesclado no tema padrão** do Godot: `CanvasLayer` não herda o tema do pai, então não há `theme.tres` | `assets/ui/theme.tres` em `gui/theme/custom` |
+| B4-10 | Limite da Web medido **em gzip** (o que o navegador baixa; o Pages serve comprimido). O `index.wasm` do Godot 4.7 sozinho tem 39,5 MB sem compressão | sem compressão (exigiria compilar o motor sem módulos) |
+| B4-11 | Tremor de câmera por `h_offset`/`v_offset`: o enquadramento testado (`_test_camera`) não muda | mexer no transform |
+| B4-12 | Opções em duas colunas (volumes à esquerda, chaves à direita) para caber em 720p | uma coluna com rolagem |
+| B4-13 | Torcida: quads virados para a câmera fixa (`MultiMesh` por cor de camisa, 6 chamadas), pula no ponto e se agita com rally ≥ 5 | billboards por pessoa |
+| B4-14 | Mar e camisas da torcida **fora do azul do seu time**: o e2e acha o jogador pela cor da camisa | trocar a detecção do e2e |
+
+---
+
+## 10. Resultado (fim da fase)
+
+Implementada em 2026-11-01 (versão 0.5.0).
+
+| Medida | Meta | Resultado |
+|---|---|---|
+| Lógica intacta (RNF-4.05) | mesmos números com e sem views | `_test_views_do_not_change_logic`: 5 min bot × bot 1v1 e 2v2 idênticos; simulações com semente (duração casual × Fácil, 1v1 e 2v2) iguais às da Fase 3 |
+| Sincronia (RF-4.02) | contato ± 1 quadro | erro 0 s em manchete, toque, cortada, flutuante e viagem; toque cedo corrige com mistura (8° no quadro contra 45° sem mistura) |
+| Orçamento (RNF-4.02) | ≤ 80 chamadas, ≤ 60 k tris, ≤ 5 k por personagem | 2v2: 24 chamadas, 9,5 k tris, 660 tris por personagem, 92 pessoas na torcida |
+| Eventos com som (RF-4.07) | todos | 13 sinais do `Game` pedem um som existente; 28 SFX + 2 músicas = 1,2 MB |
+| Alvos de toque (RF-4.09) | ≥ 64 px em 720p | 26 botões/controles nas telas, pausa e HUD |
+| Tamanho (RNF-4.03) | APK ≤ 60 MB, Web ≤ 40 MB | CI do PR #15: APK de debug 28 MB; Web wasm + pck 39 MB sem compressão, 10 MB em gzip (conferido a cada execução) |
+| Fps no e2e | registro | Chromium com swiftshader (CPU, sem GPU) no CI: médio 10, p1 6,9 — só registro; o número que vale é o do aparelho |
+
+**Em aberto (precisa do aparelho):** RNF-4.01 (60 fps / p1 ≥ 50 no Android de entrada e no Galaxy — o contador `-- --fps` e o e2e já medem), RNF-4.04 (tempo de carregamento) e os critérios 3 (ações reconhecíveis por quem não conhece o jogo) e 1 (registro no README).

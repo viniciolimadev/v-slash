@@ -14,7 +14,7 @@ Jogo de vôlei para celular em **Godot 4.7 / GDScript**, renderer Compatibility 
 | [docs/SDD.md](docs/SDD.md) | arquitetura, invariantes, ADRs, decisões de produto (como) |
 | `docs/SDD-fase-N.md` | design de implementação da fase atual — **a fonte da verdade para a tarefa** |
 
-Fase atual: **Fase 3 implementada** ([docs/SDD-fase-3.md](docs/SDD-fase-3.md); falta o teste no celular); a **Fase 4** segue [docs/SDD-fase-4.md](docs/SDD-fase-4.md).
+Fase atual: **Fase 4 implementada** ([docs/SDD-fase-4.md](docs/SDD-fase-4.md); falta o teste no celular); a **Fase 5** segue [docs/SDD-fase-5.md](docs/SDD-fase-5.md).
 
 ## Mapa do código
 
@@ -27,8 +27,10 @@ scripts/ai/bot_brain.gd    bot (lê o mesmo plano, chama attempt_hit)
 scripts/ai/partner_brain.gd  2v2: posição sem bola por papel
 scripts/core/court_spec.gd medidas da quadra por modo (1v1 / 2v2)
 scripts/core/team.gd       jogadores do time e ordem de saque
-scripts/entities/          Player, Ball (visual), Court
-scripts/ui/                TouchControls, Hud, Markers
+scripts/entities/          Player, Ball (lógica), Court (quadra simples)
+scripts/view/              views (ADR-09): PlayerViewModel, AnimTable, CourtView, Fx, Sfx
+scripts/ui/                TouchControls, Hud, Markers, UiTheme, Icons
+assets/                    fonte e áudio (gerado por tools/gen_audio.py)
 tests/run_tests.gd         testes headless
 tests/e2e/mobile_smoke.js  e2e no navegador com toque emulado
 ```
@@ -50,7 +52,7 @@ Se o binário `godot` não existir no ambiente, diga isso no relatório final: *
 3. **`core/` não importa `ui/` nem `ai/`.** `Game` comunica por sinais e consultas.
 4. **Bot usa `attempt_hit` como o humano.** Sem atalho de regra para a IA. Mecânica nova → bot usa.
 5. **`scenes/main.tscn` roda sozinha** (testes, `--autoplay`) — sem autoload, sem depender da `App`.
-6. **Tudo por código** até a Fase 4: sem assets externos, sem nós em `.tscn` além da raiz.
+6. **Lógica sem assets** (ADR-09): visual e som só em `scripts/view/` + `assets/`, observando sinais; a partida roda igual com `--no-views`. Sem nós em `.tscn` além da raiz.
 7. **Não afrouxe testes existentes** para passar. Se um limite estiver errado, pare e explique.
 8. Quebrar qualquer item acima exige ADR no `docs/SDD.md` **e** aprovação do dono do projeto.
 

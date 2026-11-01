@@ -11,6 +11,16 @@ const NET_HEIGHT := 2.43
 const NET_OVERHANG := 0.7          # m que a rede passa das antenas, de cada lado
 const LINE_TOLERANCE := 0.05       # bola na linha = dentro
 
+# --- Visual (Fase 4) ---
+const USE_MODEL_VIEWS := true      # false = formas simples das Fases 0–3 (PlayerViewSimple, quadra lisa)
+const SHAKE_TIME := 0.12           # s de tremor da câmera na cortada / saque viagem
+const SHAKE_AMP := 0.12            # m de tremor com o golpe mais forte (perfeito, velocidade máxima)
+# vibração por evento (ms), respeitando a opção do jogador
+const VIBRATE_PERFECT := 45
+const VIBRATE_GOOD := 20
+const VIBRATE_BLOCK := 60
+const VIBRATE_POINT := 30          # ponto seu: duas vezes, com 0,1 s entre elas
+
 # --- Partida ---
 const SET_POINTS := 15
 const SETS_TO_WIN := 2             # melhor de 3

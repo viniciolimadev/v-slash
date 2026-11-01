@@ -8,6 +8,8 @@ var save := SaveData.new()          # os testes trocam o caminho antes de adicio
 var screen: Control = null          # tela atual (null durante a partida)
 var match_node: MatchScene = null
 
+var music: AudioStreamPlayer        # música do menu (a partida tem a sua, no Sfx)
+
 var _layer: CanvasLayer
 
 
@@ -16,6 +18,8 @@ func _ready() -> void:
 	_layer.layer = 10
 	add_child(_layer)
 	save.load_file()
+	Sfx.apply_volumes(save.music_vol, save.sfx_vol)
+	_setup_audio()
 	if "--autoplay" in OS.get_cmdline_user_args():
 		_open_match(MatchConfig.new())  # demo bot x bot direto, sem menus
 		return
@@ -81,6 +85,7 @@ func start_tutorial(then_level: int, then_mode: int = MatchConfig.Mode.ONE_V_ONE
 
 func _open_match(cfg: MatchConfig) -> MatchScene:
 	_clear()
+	music.stop()
 	var m: MatchScene = load(MATCH_SCENE).instantiate()
 	m.config = cfg
 	m.save = save
@@ -99,8 +104,31 @@ func _on_match_finished(r: MatchResult) -> void:
 
 func _show(s: Control) -> void:
 	_clear()
+	if not music.playing:
+		music.play()
 	screen = s
 	_layer.add_child(s)
+
+
+## Música do menu e o clique dos botões (as telas tocam pelo grupo "ui_click").
+func _setup_audio() -> void:
+	music = AudioStreamPlayer.new()
+	music.bus = &"Music"
+	music.volume_db = -6.0
+	var path := "res://assets/audio/music/menu.ogg"
+	if ResourceLoader.exists(path):
+		var s: AudioStreamOggVorbis = load(path)
+		s.loop = true
+		music.stream = s
+	add_child(music)
+	var click := AudioStreamPlayer.new()
+	click.bus = &"SFX"
+	click.volume_db = -8.0
+	click.process_mode = Node.PROCESS_MODE_ALWAYS     # também no menu de pausa
+	if ResourceLoader.exists("res://assets/audio/sfx/ui_click.ogg"):
+		click.stream = load("res://assets/audio/sfx/ui_click.ogg")
+	click.add_to_group("ui_click")
+	add_child(click)
 
 
 ## Fecha a tela ou a partida atual (e despausa: sair pela pausa deixaria a árvore parada).

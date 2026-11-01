@@ -12,6 +12,7 @@ signal serve_type_chosen(kind: int)
 enum Mode { STANDALONE, MATCH, TUTORIAL }
 
 var _score: Label
+var _plate: PanelContainer
 var _rally: Label
 var _badge: Label
 var _banner: Label
@@ -33,12 +34,26 @@ func _ready() -> void:
 	add_child(root)
 	# "and_offsets": só set_anchors_preset() mantém o retângulo atual (0x0)
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_score = _make_label(root, 34, 8.0, 46.0)
-	_rally = _make_label(root, 20, 52.0, 28.0)
-	_badge = _make_label(root, 22, 80.0, 28.0)
-	_popup = _make_label(root, 46, 108.0, 60.0)
-	_message = _make_label(root, 30, 166.0, 44.0)
-	_banner = _make_label(root, 44, 250.0, 70.0)
+	# placar numa "plaquinha" no centro do topo
+	var plate := PanelContainer.new()
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(plate)
+	plate.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	plate.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	plate.offset_top = 6.0
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", -4)
+	plate.add_child(box)
+	_score = _plain_label(box, 34)
+	_rally = _plain_label(box, 18)
+	_plate = plate
+	_badge = _make_label(root, 22, 96.0, 28.0)
+	_popup = _make_label(root, 46, 120.0, 60.0)
+	_message = _make_label(root, 30, 178.0, 44.0)
+	_banner = _make_label(root, 44, 250.0, 84.0)
+	var band := StyleBoxFlat.new()
+	band.bg_color = UiTheme.PANEL
+	_banner.add_theme_stylebox_override("normal", band)
 	_popup.modulate.a = 0.0
 	_message.modulate.a = 0.0
 	_banner.modulate.a = 0.0
@@ -48,7 +63,8 @@ func _ready() -> void:
 	_reset_btn.pressed.connect(func() -> void: reset_pressed.emit())
 
 	_pause_btn = _make_button(root, "II")
-	_pause_btn.custom_minimum_size = Vector2(72.0, 56.0)
+	_pause_btn.custom_minimum_size = Vector2(76.0, 64.0)
+	_pause_btn.add_theme_font_size_override("font_size", 28)
 	_pause_btn.size = _pause_btn.custom_minimum_size
 	_pause_btn.position = Vector2(14.0, 12.0)
 	_pause_btn.visible = false
@@ -68,8 +84,8 @@ func _ready() -> void:
 	root.add_child(_serve_box)
 	_serve_box.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_serve_box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_serve_box.offset_top = 12.0
-	_serve_box.offset_bottom = 58.0
+	_serve_box.offset_top = 10.0
+	_serve_box.offset_bottom = 74.0
 	_place_serve_box(Mode.STANDALONE)
 	_serve_box.visible = false
 	var group := ButtonGroup.new()
@@ -79,8 +95,14 @@ func _ready() -> void:
 		b.focus_mode = Control.FOCUS_NONE
 		b.toggle_mode = true
 		b.button_group = group
-		b.add_theme_font_size_override("font_size", 18)
-		b.custom_minimum_size = Vector2(132.0, 46.0)
+		b.add_theme_font_size_override("font_size", 17)
+		b.add_theme_constant_override("outline_size", 4)
+		for st in ["normal", "hover", "pressed", "hover_pressed"]:
+			var sb := b.get_theme_stylebox(st).duplicate() as StyleBoxFlat
+			sb.content_margin_left = 6.0
+			sb.content_margin_right = 6.0
+			b.add_theme_stylebox_override(st, sb)
+		b.custom_minimum_size = Vector2(128.0, 64.0)
 		b.pressed.connect(func() -> void: serve_type_chosen.emit(kind))
 		_serve_box.add_child(b)
 		_serve_btns.append(b)
@@ -90,8 +112,7 @@ func set_mode(mode: Mode) -> void:
 	_reset_btn.visible = mode == Mode.STANDALONE
 	_level_btn.visible = mode == Mode.STANDALONE
 	_pause_btn.visible = mode != Mode.STANDALONE
-	_score.visible = mode != Mode.TUTORIAL
-	_rally.visible = mode != Mode.TUTORIAL
+	_plate.visible = mode != Mode.TUTORIAL
 	_place_serve_box(mode)
 	if mode != Mode.STANDALONE:
 		E2eHooks.publish("hud/pause", _pause_btn)
@@ -125,13 +146,17 @@ func set_level_name(level_text: String) -> void:
 	_level_btn.text = "Bot: " + level_text
 
 
-## Feedback rápido do toque (PERFEITO!, BOM, CEDO, LONGE...).
-func popup(text: String, color: Color) -> void:
+## Feedback rápido do toque (PERFEITO!, BOM, CEDO, LONGE...). punch = entra grande (PERFEITO).
+func popup(text: String, color: Color, punch := false) -> void:
 	_popup.text = text
 	_popup.modulate = color
 	if _popup_tw != null and _popup_tw.is_valid():
 		_popup_tw.kill()
+	_popup.pivot_offset = _popup.size * 0.5
+	_popup.scale = Vector2.ONE * (1.6 if punch else 1.0)
 	_popup_tw = create_tween()
+	if punch:
+		_popup_tw.tween_property(_popup, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_popup_tw.tween_interval(0.45)
 	_popup_tw.tween_property(_popup, "modulate:a", 0.0, 0.35)
 
@@ -169,7 +194,7 @@ func _make_label(parent: Control, font_size: int, top: float, height: float) -> 
 	var ls := LabelSettings.new()
 	ls.font_size = font_size
 	ls.outline_size = maxi(4, int(font_size * 0.2))
-	ls.outline_color = Color(0.0, 0.0, 0.0, 0.85)
+	ls.outline_color = UiTheme.INK
 	l.label_settings = ls
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -181,11 +206,24 @@ func _make_label(parent: Control, font_size: int, top: float, height: float) -> 
 	return l
 
 
+func _plain_label(parent: Control, font_size: int) -> Label:
+	var l := Label.new()
+	var ls := LabelSettings.new()
+	ls.font_size = font_size
+	ls.outline_size = maxi(4, int(font_size * 0.2))
+	ls.outline_color = UiTheme.INK
+	l.label_settings = ls
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(l)
+	return l
+
+
 func _make_button(parent: Control, text: String) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.add_theme_font_size_override("font_size", 22)
-	b.custom_minimum_size = Vector2(190.0, 46.0)
+	b.custom_minimum_size = Vector2(190.0, 56.0)
 	parent.add_child(b)
 	return b

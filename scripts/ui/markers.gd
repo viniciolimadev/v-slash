@@ -29,9 +29,13 @@ func setup(g: Game, h: Player) -> void:
 	_land = _disk(0.1, _flat(Color(1.0, 1.0, 1.0, 0.8)))
 	_ring_mat = _flat(Color(0.25, 0.85, 0.75))
 	_ring = _torus(0.38, 0.48, _ring_mat)
+	_outline(_ring, 0.34, 0.52)
 	_approach_mat = _flat(Color(1.0, 1.0, 1.0, 0.9))
 	_approach = _torus(0.4, 0.47, _approach_mat)
+	_outline(_approach, 0.37, 0.5)
 	_reticle = _torus(0.2, 0.28, _flat(Color(1.0, 0.85, 0.2)))
+	_outline(_reticle, 0.17, 0.31)
+	_outline(_land, 0.1, 0.16)
 	_reticle_label = _label(64)
 	_reticle_label.pixel_size = 0.012
 	_reticle_label.modulate = Color(1.0, 0.9, 0.3)
@@ -236,6 +240,21 @@ func _torus(inner: float, outer: float, mat: Material) -> MeshInstance3D:
 	mi.material_override = mat
 	add_child(mi)
 	return mi
+
+
+## Contorno escuro embaixo do marcador: mantém a leitura sobre a areia clara (RF-4.05).
+func _outline(of: MeshInstance3D, inner: float, outer: float) -> void:
+	var t := TorusMesh.new()
+	t.inner_radius = inner
+	t.outer_radius = outer
+	t.rings = 48
+	t.ring_segments = 6
+	var mi := MeshInstance3D.new()
+	mi.mesh = t
+	mi.material_override = _flat(Color(0.05, 0.05, 0.1, 0.5))
+	mi.position = Vector3(0.0, -0.01, 0.0)
+	mi.scale = Vector3(1.0, 0.15, 1.0)  # achatado: fica por baixo do marcador, não por cima
+	of.add_child(mi)
 
 
 func _disk(radius: float, mat: Material) -> MeshInstance3D:

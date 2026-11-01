@@ -1,7 +1,7 @@
 // Teste de ponta a ponta no navegador, emulando um celular na horizontal com toque.
-// Abre a versão Web e percorre título → escolha do bot → tutorial (pular) → partida;
+// Abre a versão Web e percorre título → opções → escolha do bot → tutorial (pular) → partida;
 // na partida arrasta o analógico, escolhe o saque flutuante, saca e confere (pelos pixels da tela) que o jogador
-// azul realmente se moveu; depois pausa e sai para o menu. Por fim abre uma partida 2v2.
+// azul realmente se moveu; registra o fps; depois pausa e sai para o menu. Por fim abre uma partida 2v2.
 // O jogo publica a tela atual e a posição dos botões em window.__vs (scripts/ui/e2e_hooks.gd).
 //
 //   node tests/e2e/mobile_smoke.js <url-ou-pasta-export/web> [pasta-dos-prints]
@@ -115,6 +115,11 @@ async function playerCenter(decoder, png) {
   // menus
   await screenIs('title');
   await shot('0-titulo');
+  await tap('title/options');
+  await screenIs('options');
+  await shot('0b-opcoes');
+  await tap('options/back');
+  await screenIs('title');
   await tap('title/play');
   await screenIs('level');
   await shot('1-escolha-do-bot');
@@ -168,6 +173,12 @@ async function playerCenter(decoder, png) {
   await touch('touchEnd', []);
   await page.waitForTimeout(1500);
   await shot('7-depois-do-saque');
+
+  // desempenho: o medidor da partida publica fps médio e p1 (no swiftshader é só registro)
+  await page.waitForTimeout(1200);
+  const perf = await page.evaluate(() => window.__vs && window.__vs.fps);
+  console.log('  fps (registro): ' + (perf ? `médio ${perf.avg} · p1 ${perf.p1} · ${perf.frames} quadros` : 'sem dado'));
+  check(perf && perf.frames > 30, 'medidor de fps publicou os quadros da partida');
 
   // pausa e volta ao menu
   await tap('hud/pause');

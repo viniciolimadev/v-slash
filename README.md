@@ -1,10 +1,11 @@
-# Vôlei Mobile — Fase 3
+# Vôlei Mobile — Fase 4
 
 Vôlei 1v1 contra bot: **bola cinemática + anel de timing + gesto segura → mira → solta**.
 Partida em **melhor de 3 sets de 15** (vantagem de 2), com título, escolha do bot, tutorial, pausa, opções e resultado; progresso salvo no aparelho.
 Fase 2: saque **por baixo / flutuante / viagem**, **bloqueio**, **largada**, **peixinho** e stamina (experimento, desligada).
 Fase 3: modo **2v2** (quadra 8 × 8, parceiro IA): você controla sempre quem vai tocar na bola; ninguém toca duas vezes seguidas.
-Tudo é gerado por código (formas simples). Godot **4.7**, renderizador Compatibility (Android/iOS/Web).
+Fase 4: **praia** low-poly com jogadores animados (esqueleto, 14 clipes no tempo do toque), torcida, rastro/areia/tremor, sons e músicas, tema próprio com a fonte Fredoka.
+Modelos, quadra e ícones são gerados por código; sons e músicas por `tools/gen_audio.py` ([docs/ARTE.md](docs/ARTE.md)). Godot **4.7**, renderizador Compatibility (Android/iOS/Web).
 
 ## Abrir e jogar
 
@@ -40,7 +41,7 @@ Tudo é gerado por código (formas simples). Godot **4.7**, renderizador Compati
 Timing ruim = bola menos precisa (e cortada mais fraca). Longe do anel = "LONGE", não toca.
 
 O HUD mostra o placar do set, os sets, **SET POINT / MATCH POINT**, o rally e o recorde.
-Opções (título ou pausa): sensibilidade da mira, modo canhoto (joystick e botão trocam de lado), vibração.
+Opções (título ou pausa): sensibilidade da mira, volume de música e de efeitos, modo canhoto (joystick e botão trocam de lado), vibração.
 
 ## Ajustar o feel → `scripts/core/tuning.gd`
 
@@ -64,6 +65,9 @@ Opções (título ou pausa): sensibilidade da mira, modo canhoto (joystick e bot
 | bot saca/bloqueia/larga mais ou menos | `BOT_SERVE_MIX`, `BOT_BLOCK_CHANCE`, `BOT_BLOCK_SIGMA`, `BOT_DINK_CHANCE` |
 | tamanho da quadra (1v1 / 2v2) | `COURT_1V1`, `COURT_2V2`, `NET_OVERHANG` |
 | 2v2: parceiro e dupla do bot | `PARTNER_LEVEL`, `BOT_SPEED_2V2` |
+| visual simples (sem modelos nem praia) | `USE_MODEL_VIEWS` |
+| tremor de câmera na cortada | `SHAKE_TIME`, `SHAKE_AMP` |
+| vibração por evento | `VIBRATE_PERFECT`, `VIBRATE_GOOD`, `VIBRATE_BLOCK`, `VIBRATE_POINT` |
 
 Equilíbrio dos valores atuais (`godot --headless --script res://tests/balance_sim.gd -- --matches=48`: 4 × 20 min por célula; "humano" roteirizado com reação e erro de timing, que não bloqueia; o "bom" ataca longe das mãos do bot quando ele está na rede):
 
@@ -101,9 +105,12 @@ Uma vez só: Settings → Pages → Source = **GitHub Actions**.
 godot --headless --import                              # 1ª vez: registra as classes
 godot --headless --script res://tests/run_tests.gd     # física, sets, save, telas, tutorial, simulações
 godot -- --autoplay                                    # demo bot x bot
+godot -- --autoplay --fps                              # com contador de fps (médio e p1)
+godot -- --autoplay --no-views                         # só a lógica: sem modelos, praia, efeitos nem som
+python3 tools/gen_audio.py                             # regenera assets/audio (precisa de ffmpeg com libvorbis)
 ```
 
-Teste no navegador emulando celular (título → escolha → tutorial → partida → pausa → menu, com prints):
+Teste no navegador emulando celular (título → opções → escolha → tutorial → partida → fps → pausa → menu → 2v2, com prints):
 
 ```bash
 mkdir -p export && touch export/.gdignore             # Godot ignora builds/prints
@@ -112,7 +119,7 @@ npm i --prefix /tmp/pw playwright && /tmp/pw/node_modules/.bin/playwright instal
 NODE_PATH=/tmp/pw/node_modules node tests/e2e/mobile_smoke.js export/web export/e2e  # prints em export/e2e
 ```
 
-No CI os prints ficam em Actions → execução → Artifacts → `e2e-screenshots`.
+No CI os prints ficam em Actions → execução → Artifacts → `e2e-screenshots`. O CI também falha se o APK passar de 60 MB ou a Web (wasm + pck, gzip) passar de 40 MB.
 
 ## Estrutura
 
@@ -125,13 +132,16 @@ scripts/
   app/                 roteador de telas (App) e MatchConfig
   core/                regras, física, sets, estatísticas, save (sem nós visuais)
   ai/                  bot
-  entities/            objetos 3D do jogo
-  ui/                  HUD, controles, marcadores, pausa
+  entities/            jogador e bola (lógica) e a quadra simples
+  view/                visual e som (ADR-09): modelos, animações, praia, efeitos, sons
+  ui/                  HUD, controles, marcadores, pausa, tema, ícones, fps
   ui/screens/          título, escolha do bot, resultado, opções
   tutorial/            tutorial jogável
 tests/run_tests.gd     testes headless
 tests/balance_sim.gd   simulação de equilíbrio (tabela acima; fora do CI)
-docs/                  roadmap, SDDs, padrão de trabalho
+assets/                fonte (OFL) e áudio gerado; créditos em CREDITS.md
+tools/gen_audio.py     sintetizador dos sons e músicas
+docs/                  roadmap, SDDs, padrão de trabalho, pipeline de arte
 ```
 
 | Arquivo | Faz |
@@ -146,9 +156,15 @@ docs/                  roadmap, SDDs, padrão de trabalho
 | `scripts/ai/partner_brain.gd` | 2v2: posição sem bola por papel (recepção, levantador, ataque, defesa) |
 | `scripts/core/team.gd` | jogadores do time e ordem de saque |
 | `scripts/core/court_spec.gd` | medidas da quadra por modo |
-| `scripts/entities/ball.gd` | visual da bola |
-| `scripts/entities/player.gd` | movimento, pulo automático, animação |
-| `scripts/entities/court.gd` | quadra, rede, antenas |
+| `scripts/entities/ball.gd` | bola em jogo (modo, quiques depois do ponto) |
+| `scripts/entities/player.gd` | movimento, pulo automático, peixinho; avisa a view por sinais |
+| `scripts/entities/court.gd` | quadra simples (com `USE_MODEL_VIEWS = false`) |
+| `scripts/view/player_view_model.gd` | jogador low-poly (esqueleto + malha única), clipes agendados pelo plano |
+| `scripts/view/anim_table.gd` | os 14 clipes (poses por junta, instante de contato) |
+| `scripts/view/court_view.gd` | praia: areia, linhas, rede, mar, coqueiros, torcida |
+| `scripts/view/fx.gd`, `camera_fx.gd` | rastro, areia, brilho do PERFEITO, tremor de câmera |
+| `scripts/view/sfx.gd` | sons por evento do jogo, torcida, música da partida, volumes |
+| `scripts/ui/ui_theme.gd`, `icons.gd` | tema (fonte, botões, painéis) e ícones das ações |
 | `scripts/ui/markers.gd` | sombra, ponto de queda, anel, mira |
 | `scripts/ui/touch_controls.gd` | joystick flutuante + botão de ação |
 | `scripts/ui/hud.gd` | placar, sets, selos, faixas, feedback, botão de pausa |
@@ -161,4 +177,4 @@ docs/                  roadmap, SDDs, padrão de trabalho
 
 ## Próximas fases
 
-Arte e som → Fase 4 · lançamento → Fase 5. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).
+Lançamento → Fase 5. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).

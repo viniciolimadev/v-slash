@@ -3,6 +3,8 @@ extends Node3D
 ## Uma partida: monta tudo por código (quadra, câmera, jogadores, bola, marcadores e UI).
 ## O App define `config` (e `save`) antes de adicionar a cena; sozinha, roda em rally infinito.
 ## Demo bot x bot: rode com o argumento de usuário  -- --autoplay
+## Só lógica (simulações rápidas, sem modelos, quadra nem efeitos):  -- --no-views
+## Contador de fps (médio e p1):  -- --fps
 
 signal match_finished(result: MatchResult)
 signal exit_requested
@@ -12,6 +14,7 @@ const HOME_COLOR := Color(0.13, 0.58, 0.92)
 const AWAY_COLOR := Color(0.95, 0.42, 0.24)
 
 var autoplay := false               # os dois lados controlados pela IA
+var views := true                   # false = --no-views: a lógica roda igual, sem nada de visual (ADR-09)
 var config: MatchConfig = null      # null = padrão (rally infinito contra o Fácil)
 var save: SaveData = null           # só com o App: habilita Opções e Sair na pausa
 var game: Game
@@ -24,6 +27,10 @@ var controls: TouchControls
 var hud: Hud
 var markers: Markers
 var cam: Camera3D
+var court_view: CourtView = null    # praia (Fase 4); null com --no-views ou USE_MODEL_VIEWS = false
+var fx: Fx = null                   # efeitos (rastro, areia, brilho, tremor); null com --no-views
+var sfx: Sfx = null                 # sons e música da partida; null com --no-views
+var fps: FpsMeter                   # fps médio/p1 (contador com -- --fps; e2e lê na Web)
 var stats := MatchStats.new()
 var pause_menu: PauseMenu
 var tutorial: TutorialDirector = null
@@ -34,8 +41,11 @@ var _finished := false
 func _ready() -> void:
 	if "--autoplay" in OS.get_cmdline_user_args():
 		autoplay = true
+	if "--no-views" in OS.get_cmdline_user_args():
+		views = false
 	if config == null:
 		config = MatchConfig.new()
+	UiTheme.install()
 	_setup_input()
 	_build_world()
 	_build_match()
@@ -53,9 +63,12 @@ func _physics_process(delta: float) -> void:
 func _process(_delta: float) -> void:
 	markers.refresh()
 	controls.action_label = game.action_label(_me())
+	controls.action_act = game.current_act(_me())
 	controls.action_hot = game.is_hot(_me())
 	controls.queue_redraw()
 	hud.set_board(game.rules, game.rally_touches, game.best_rally)
+	if court_view != null:
+		court_view.react((game.rally_touches - 4) / 10.0)
 	hud.show_serve_picker(_can_pick_serve(), game.serve_type[human.team])
 	_update_badge()
 
@@ -77,9 +90,14 @@ func _build_world() -> void:
 	add_child(sun)
 
 	court_spec = CourtSpec.for_mode(config.mode)
-	var court := Court.new()
-	court.spec = court_spec
-	add_child(court)
+	if views and Tuning.USE_MODEL_VIEWS:
+		court_view = CourtView.new()
+		court_view.spec = court_spec
+		add_child(court_view)
+	elif views:
+		var court := Court.new()
+		court.spec = court_spec
+		add_child(court)
 
 	# câmera atrás do seu lado, alta o bastante para ver as duas quadras
 	cam = Camera3D.new()
@@ -142,6 +160,8 @@ func _build_match() -> void:
 			for q in game.teams[p.team].players:
 				q.set_ring(2 if q == p else 1, q == p))
 	stats.attach(game)
+	if views:
+		_attach_views(ball)
 	markers = Markers.new()
 	add_child(markers)
 	markers.setup(game, human)
@@ -150,6 +170,29 @@ func _build_match() -> void:
 		tutorial.setup(game, human, markers)
 		add_child(tutorial)
 		tutorial.finished.connect(func(skipped: bool) -> void: tutorial_finished.emit(skipped))
+
+
+## Views (ADR-09): filhas da lógica, só observam. Sem elas (--no-views) a partida é a mesma.
+func _attach_views(ball: Ball) -> void:
+	for p in game.players:
+		var v: PlayerView
+		if Tuning.USE_MODEL_VIEWS:
+			var m := PlayerViewModel.new()
+			m.uniform = game.teams[p.team].players.find(p)     # o segundo da dupla usa o 2º uniforme
+			v = m
+		else:
+			v = PlayerViewSimple.new()
+		p.add_child(v)
+		v.bind(p, game)
+	var bv := BallView.new()
+	ball.add_child(bv)
+	bv.bind(ball)
+	fx = Fx.new()
+	add_child(fx)
+	fx.bind(game, cam)
+	sfx = Sfx.new()
+	add_child(sfx)
+	sfx.bind(game, human.team)
 
 
 ## Primeira partida 2v2: faixa explicando a troca de controle (uma vez por save).
@@ -176,6 +219,8 @@ func _build_ui() -> void:
 		hud.set_mode(Hud.Mode.TUTORIAL)
 	elif not config.endless:
 		hud.set_mode(Hud.Mode.MATCH)
+	fps = FpsMeter.new()
+	add_child(fps)
 	pause_menu = PauseMenu.new()
 	add_child(pause_menu)
 	hud.pause_pressed.connect(pause_game)
@@ -267,16 +312,27 @@ func _on_serve_type(kind: int) -> void:
 func _on_served(p: Player, _kind: int, grade: String) -> void:
 	# saque com timing mostra a nota como os outros toques; por baixo não tem nota
 	if p == _me() and grade != "SAQUE":
-		hud.popup(grade, Color(0.45, 1.0, 0.55) if grade == "PERFEITO!" else Color(1.0, 0.95, 0.65))
+		var perfect := grade == "PERFEITO!"
+		hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65), perfect)
 
 
 func _on_touch(p: Player, grade: String, quality: float) -> void:
 	if p != _me() or grade == "SAQUE":
 		return
 	var perfect := quality >= 1.0
-	hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65))
-	if config.vibration and OS.has_feature("mobile"):
-		Input.vibrate_handheld(45 if perfect else 20)
+	hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65), perfect)
+	if game.last_kind == Game.Act.BLOCK:
+		_vibrate(Tuning.VIBRATE_BLOCK)
+	else:
+		_vibrate(Tuning.VIBRATE_PERFECT if perfect else Tuning.VIBRATE_GOOD)
+
+
+func _vibrate(ms: int, times := 1) -> void:
+	if not config.vibration or not OS.has_feature("mobile"):
+		return
+	Input.vibrate_handheld(ms)
+	if times > 1:
+		get_tree().create_timer(0.1).timeout.connect(func() -> void: _vibrate(ms, times - 1))
 
 
 func _on_whiff(p: Player, why: String) -> void:
@@ -285,8 +341,11 @@ func _on_whiff(p: Player, why: String) -> void:
 
 
 func _on_point(team: int, reason: String) -> void:
+	if court_view != null:
+		court_view.react(0.0, 1.2)
 	if team == human.team:
 		hud.message("Ponto seu! " + reason, Color(0.55, 1.0, 0.65))
+		_vibrate(Tuning.VIBRATE_POINT, 2)
 	else:
 		hud.message("Ponto do bot. " + reason, Color(1.0, 0.62, 0.52))
 

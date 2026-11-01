@@ -15,6 +15,8 @@ signal served(player: Player, serve_kind: int, grade: String)
 signal action_used(player: Player, act: int)
 ## 2v2: o controle passou para outro jogador do seu time.
 signal control_changed(player: Player)
+## Bola bateu em algo (kind = BallSim.Ev: NET, ANTENNA, LAND, BLOCK); para som e efeitos.
+signal ball_event(kind: int, pos: Vector3)
 
 ## SERVE_TOSS: bola lançada no saque flutuante/viagem, esperando o toque (Fase 2).
 enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER, SERVE_TOSS }
@@ -546,7 +548,7 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 	last_kind = shot.kind
 	rally_touches += 1
 	p.swing_cd = 0.25
-	p.swing(shot.kind)
+	p.swing(shot.kind, time)
 	touch_made.emit(p, grade, q)
 	_make_plan()
 
@@ -589,7 +591,7 @@ func _serve(p: Player, aim: Vector3, q: float, grade: String = "SAQUE") -> void:
 	last_kind = Act.SERVE
 	touches = 3          # quem sacou não pode tocar de novo antes da bola passar
 	rally_touches = 1
-	p.swing(Act.SERVE)
+	p.swing(Act.SERVE, time)
 	touch_made.emit(p, "SAQUE", q)
 	served.emit(p, kind, grade)
 	_make_plan()
@@ -668,7 +670,7 @@ func _start_block(p: Player) -> void:
 	p.spend(Tuning.STAMINA_COST_BLOCK)
 	blocks.append(bk)
 	p.swing_cd = Tuning.JUMP_TIME_UP * 2.0 + Tuning.BLOCK_RECOVER
-	p.swing(Act.BLOCK)
+	p.swing(Act.BLOCK, time)
 	action_used.emit(p, Act.BLOCK)
 	if ball.mode == Ball.Mode.FLYING:
 		ball.sim.blocks.append(bk)
@@ -708,7 +710,7 @@ func _on_block(e: Dictionary) -> void:
 
 func _whiff(p: Player, why: String) -> void:
 	p.swing_cd = Tuning.WHIFF_COOLDOWN
-	p.swing(Act.NONE)
+	p.swing(Act.NONE, time)
 	whiffed.emit(p, why)
 
 
@@ -827,7 +829,7 @@ func _auto_jumps() -> void:
 		return
 	var at := plan.pos
 	var who := plan.player
-	if who == null or not who.is_grounded() or not (who.holding or _has_pending(who)):
+	if who == null or not who.is_grounded() or not (who.holding or has_pending(who)):
 		return
 	if Vector2(at.x - who.position.x, at.z - who.position.z).length() <= Tuning.REACH + 1.2:
 		who.start_jump(at)
@@ -838,7 +840,7 @@ func _in_rally() -> bool:
 	return state == State.PLAY or state == State.SERVE_TOSS
 
 
-func _has_pending(p: Player) -> bool:
+func has_pending(p: Player) -> bool:
 	for item in _pending:
 		if item["player"] == p:
 			return true
@@ -861,6 +863,8 @@ func _update_assists() -> void:
 func _on_ball_event(e: Dictionary) -> void:
 	var kind: int = e["type"]
 	var pos: Vector3 = e["pos"]
+	if kind != BallSim.Ev.CROSS:
+		ball_event.emit(kind, pos)
 	if state == State.SERVE_TOSS and kind == BallSim.Ev.LAND:
 		_award(1 - server_team, "Saque perdido")
 		return

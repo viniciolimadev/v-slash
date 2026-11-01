@@ -17,6 +17,7 @@ const TOP_BAR := 80.0               # faixa dos botões do topo (não conta como
 const DEAD_ZONE := 0.12
 
 var action_label := ""
+var action_act := 0                 # Game.Act do botão agora (ícone acima do texto)
 var action_hot := false             # true quando está na hora de soltar
 var left_handed := false            # canhoto: botão de ação à esquerda, joystick à direita
 
@@ -112,28 +113,37 @@ func _button_center() -> Vector2:
 
 func _draw() -> void:
 	# joystick
+	# fundo escuro translúcido: lê bem sobre a areia clara
 	var base := _joy_origin if _joy_index != -1 else _joy_home()
-	draw_circle(base, JOY_RADIUS, Color(1.0, 1.0, 1.0, 0.1))
-	draw_arc(base, JOY_RADIUS, 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 0.35), 2.0, true)
+	draw_circle(base, JOY_RADIUS, Color(0.03, 0.1, 0.16, 0.28))
+	draw_arc(base, JOY_RADIUS, 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 0.55), 3.0, true)
 	var knob := base
 	if _joy_index != -1:
 		knob = base + (_joy_pos - base).limit_length(JOY_RADIUS)
-	draw_circle(knob, KNOB_RADIUS, Color(1.0, 1.0, 1.0, 0.45))
+	draw_circle(knob, KNOB_RADIUS, Color(1.0, 1.0, 1.0, 0.7))
+	draw_arc(knob, KNOB_RADIUS, 0.0, TAU, 32, Color(0.03, 0.1, 0.16, 0.5), 2.0, true)
 
-	# botão de ação
+	# botão de ação: ícone da ação em cima, texto embaixo (o texto ensina, o ícone se lê rápido)
 	var c := _button_center()
-	var col := Color(1.0, 1.0, 1.0, 0.12)
+	var col := Color(0.03, 0.1, 0.16, 0.3)
 	if action_label != "":
-		col = Color(0.15, 0.7, 0.62, 0.55)
+		col = Color(0.1, 0.62, 0.58, 0.75)
 	if action_hot:
-		col = Color(0.3, 1.0, 0.45, 0.8)
+		col = Color(0.3, 1.0, 0.45, 0.9)
 	if _act_index != -1 or _key_down:
 		col = col.lightened(0.25)
+	draw_circle(c, BTN_RADIUS + 4.0, Color(0.03, 0.1, 0.16, 0.35))
 	draw_circle(c, BTN_RADIUS, col)
-	draw_arc(c, BTN_RADIUS, 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 0.6), 3.0, true)
+	draw_arc(c, BTN_RADIUS, 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 0.75), 3.0, true)
 	var text := action_label if action_label != "" else "—"
-	draw_string(ThemeDB.fallback_font, c + Vector2(-BTN_RADIUS, 9.0), text,
-			HORIZONTAL_ALIGNMENT_CENTER, BTN_RADIUS * 2.0, 26, Color.WHITE)
+	var ink := Color(0.05, 0.12, 0.2) if action_hot else Color.WHITE
+	if action_label != "":
+		Icons.draw_act(self, action_act, c + Vector2(0.0, -24.0), 24.0, ink)
+	var font := ThemeDB.fallback_font
+	var y := 40.0 if action_label != "" else 10.0
+	draw_string_outline(font, c + Vector2(-BTN_RADIUS, y), text, HORIZONTAL_ALIGNMENT_CENTER, BTN_RADIUS * 2.0, 24,
+			6, Color(0.05, 0.12, 0.2, 0.0 if action_hot else 0.8))
+	draw_string(font, c + Vector2(-BTN_RADIUS, y), text, HORIZONTAL_ALIGNMENT_CENTER, BTN_RADIUS * 2.0, 24, ink)
 
 	# rastro do dedo enquanto mira
 	if _act_index != -1 and _act_pos.distance_to(_act_start) > 8.0:
