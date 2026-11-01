@@ -8,6 +8,8 @@ extends RefCounted
 var p: Player
 var game: Game
 var level := 1
+var home_x := 0.0                   # onde espera sem bola (x; o lado do time é aplicado em z)
+var home_z := 4.2                   # m da rede
 var rng := RandomNumberGenerator.new()
 
 var _plan_seen := -1
@@ -38,7 +40,7 @@ func set_level(lvl: int) -> void:
 func tick(_dt: float) -> void:
 	p.move_input = Vector2.ZERO
 	var s := Game.side_of_team(p.team)
-	var home := Vector3(0.0, 0.0, s * 4.2)
+	var home := Vector3(home_x, 0.0, s * home_z)
 
 	if game.state == Game.State.SERVE_WAIT or game.state == Game.State.SERVE_TOSS:
 		p.holding = false

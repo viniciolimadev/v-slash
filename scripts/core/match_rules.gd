@@ -11,6 +11,10 @@ var set_index := 0                   # 0, 1, 2
 var history: Array[Vector2i] = []    # placar final de cada set (x = time 0)
 var winner := -1                     # time vencedor da partida (-1 = em andamento)
 var set_closed := false              # set acabou e o próximo ainda não começou
+# regras de toque do modo (padrão = 1v1, DP-01)
+var max_touches := Tuning.MAX_TOUCHES
+var same_player_twice := true        # 1v1: o mesmo jogador faz os 3 toques
+var block_counts := false            # 2v2 (praia, B3-2): bloqueio conta como toque
 
 
 func _init(p_set_points := Tuning.SET_POINTS, p_sets_to_win := Tuning.SETS_TO_WIN,
@@ -20,9 +24,21 @@ func _init(p_set_points := Tuning.SET_POINTS, p_sets_to_win := Tuning.SETS_TO_WI
 	win_by = p_win_by
 
 
+## Regras de toque do modo (MatchConfig.Mode). Devolve a si mesma.
+func for_mode(mode: int) -> MatchRules:
+	var two := mode == MatchConfig.Mode.TWO_V_TWO
+	same_player_twice = not two
+	block_counts = two
+	return self
+
+
 ## Mesmas regras, placar zerado.
 func fresh() -> MatchRules:
-	return MatchRules.new(set_points, sets_to_win, win_by)
+	var r := MatchRules.new(set_points, sets_to_win, win_by)
+	r.max_touches = max_touches
+	r.same_player_twice = same_player_twice
+	r.block_counts = block_counts
+	return r
 
 
 func is_endless() -> bool:

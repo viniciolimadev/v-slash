@@ -24,12 +24,14 @@ var state: int = State.SERVE_WAIT
 var time := 0.0
 var ball: Ball
 var players: Array[Player] = []
+var teams: Array[Team] = []
 var bots: Array[BotBrain] = []
 var human: Player = null
 var rules := MatchRules.new(0)      # infinito por padrão; a partida de verdade troca por regras com sets
 var server_team := 0
 var server: Player = null
 var last_team := -1                 # time que tocou por último
+var last_player: Player = null      # quem tocou por último (regra dos toques seguidos no 2v2)
 var touches := 0                    # toques seguidos do last_team
 var rally_touches := 0
 var best_rally := 0
@@ -69,8 +71,10 @@ func setup(p_ball: Ball, p_players: Array[Player], p_bots: Array[BotBrain]) -> v
 	bots = p_bots
 	ball.court = court
 	resolver.court = court
+	teams = [Team.new(0), Team.new(1)]
 	for p in players:
 		p.court = court
+		teams[p.team].players.append(p)
 		if p.is_human:
 			human = p
 			# começa no fundo da quadra adversária
@@ -90,6 +94,9 @@ func set_stamina(on: bool) -> void:
 
 func reset_match() -> void:
 	rules = rules.fresh()
+	for t in teams:
+		t.next_server = 0
+	server = null
 	best_rally = 0
 	_set_break = false
 	_reset_for_serve(rules.first_server(0))
@@ -483,6 +490,7 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 	else:
 		touches += 1
 	last_team = p.team
+	last_player = p
 	last_kind = shot.kind
 	rally_touches += 1
 	p.swing_cd = 0.25
@@ -525,6 +533,7 @@ func _serve(p: Player, aim: Vector3, q: float, grade: String = "SAQUE") -> void:
 	p.serving = false
 	state = State.PLAY
 	last_team = p.team
+	last_player = p
 	last_kind = Act.SERVE
 	touches = 3          # quem sacou não pode tocar de novo antes da bola passar
 	rally_touches = 1
@@ -635,9 +644,11 @@ func _on_block(e: Dictionary) -> void:
 			grade = "CEDO" if err < 0.0 else "TARDE"
 	var shot := resolver.block_exit(from, bk, q)
 	_launch(shot)
+	# 1v1: bloqueio não conta (B-4); 2v2: conta como 1º toque (praia, B3-2)
+	touches = 1 if rules.block_counts else 0
 	last_team = bk.team
+	last_player = bk.player
 	last_kind = Act.BLOCK
-	touches = 0
 	rally_touches += 1
 	touch_made.emit(bk.player, grade, q)
 	_make_plan()
@@ -682,7 +693,7 @@ func _make_plan() -> void:
 	var recv_side := side_of_point(land_point)
 	var recv_team := 0 if recv_side > 0.0 else 1
 	var n := 1 if recv_team != last_team else touches + 1
-	if n > Tuning.MAX_TOUCHES:
+	if n > rules.max_touches:
 		return              # toque além do limite não existe: a bola vai cair
 	var options: Array = []
 	if n == 1:
@@ -702,7 +713,7 @@ func _make_plan() -> void:
 			if not fake.is_empty():
 				shown = fake["pos"]
 		plan = ContactPlan.new(recv_team, n, int(opt[0]), time + float(hit["t"]), at,
-				_closest_player(recv_team, shown))
+				_choose_player(recv_team, shown, n))
 		plan.display_pos = shown
 		return
 
@@ -712,16 +723,25 @@ static func _last_time(pred: Dictionary) -> float:
 	return times[times.size() - 1]
 
 
-func _closest_player(team: int, at: Vector3) -> Player:
+## Quem do time toca a bola em `at` como n-ésimo toque do lado.
+## 1º toque: quem chega antes (empate: o mais de trás). Depois: no 2v2, nunca quem tocou por último
+## (exceto depois de bloqueio, que conta como toque mas libera o bloqueador, B3-2).
+func _choose_player(team: int, at: Vector3, n: int) -> Player:
+	var squad := teams[team].players
+	if squad.size() == 1:
+		return squad[0]
+	var banned: Player = null
+	if n > 1 and not rules.same_player_twice and last_kind != Act.BLOCK:
+		banned = last_player
 	var best: Player = null
-	var best_d := INF
-	for p in players:
-		if p.team != team:
+	var best_t := INF
+	for p in squad:
+		if p == banned:
 			continue
-		var d := Vector2(at.x - p.position.x, at.z - p.position.z).length()
-		if d < best_d:
-			best_d = d
+		var t := Vector2(at.x - p.position.x, at.z - p.position.z).length() / maxf(p.speed, 0.1)
+		if best == null or t < best_t - 1e-3 or (absf(t - best_t) <= 1e-3 and absf(p.position.z) > absf(best.position.z)):
 			best = p
+			best_t = t
 	return best
 
 
@@ -837,6 +857,7 @@ func _reset_for_serve(team: int) -> void:
 	rally_touches = 0
 	touches = 0
 	last_team = -1
+	last_player = null
 	last_kind = Act.NONE
 	blocks.clear()
 	block_plan = null
@@ -844,17 +865,22 @@ func _reset_for_serve(team: int) -> void:
 	plan_id += 1
 	_pending.clear()
 	human_aiming = false
+	# o time recuperou o saque: saca o outro da dupla; pontuou sacando: o sacador repete
+	if server == null or team != server_team:
+		server = teams[team].server_on_sideout()
 	server_team = team
-	server = null
-	for p in players:
-		if p.team == team and server == null:
-			server = p
 	for p in players:
 		var s := side_of_team(p.team)
 		p.reset_state()
 		p.serving = p == server
 		if p == server:
 			p.position = Vector3(1.2 * s, 0.0, s * (court.depth + court.serve_back))
-		else:
+		elif teams[p.team].players.size() == 1:
 			p.position = Vector3(0.0, 0.0, s * 4.2)
+		elif p.team == team:
+			p.position = Vector3(-1.5 * s, 0.0, s * court.depth * 0.45)      # parceiro do sacador
+		else:
+			# recepção lado a lado (o primeiro da lista à esquerda de quem saca)
+			var slot := -1.0 if teams[p.team].players[0] == p else 1.0
+			p.position = Vector3(slot * 2.0 * s, 0.0, s * court.depth * 0.6)
 	ball.hold(server)

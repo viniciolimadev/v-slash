@@ -18,6 +18,8 @@ var game: Game
 var court_spec: CourtSpec           # quadra do modo da config
 var human: Player
 var foe: Player
+var partner: Player = null          # 2v2: seu parceiro (IA)
+var foe2: Player = null             # 2v2: o segundo da dupla adversária
 var controls: TouchControls
 var hud: Hud
 var markers: Markers
@@ -96,6 +98,14 @@ func _build_match() -> void:
 	foe = Player.new()
 	add_child(foe)
 	foe.setup(1, false, AWAY_COLOR)
+	var two := config.mode == MatchConfig.Mode.TWO_V_TWO
+	if two:
+		partner = Player.new()
+		add_child(partner)
+		partner.setup(0, false, HOME_COLOR.darkened(0.25))
+		foe2 = Player.new()
+		add_child(foe2)
+		foe2.setup(1, false, AWAY_COLOR.darkened(0.25))
 	var ball := Ball.new()
 	add_child(ball)
 	game = Game.new()
@@ -107,7 +117,15 @@ func _build_match() -> void:
 		bots.append(BotBrain.new(foe, game, config.bot_level))
 	if autoplay:
 		bots.append(BotBrain.new(human, game, 1))
-	game.rules = MatchRules.new(0 if config.endless else Tuning.SET_POINTS)
+	if two:
+		players = [human, partner, foe, foe2]
+		bots.append(BotBrain.new(foe2, game, config.bot_level))
+		bots.append(BotBrain.new(partner, game, Tuning.PARTNER_LEVEL))
+		# sem bola, cada um da dupla espera no seu lado da quadra (posições por papel: PartnerBrain)
+		for b in bots:
+			b.home_x = -1.8 if b.p == human or b.p == foe else 1.8
+			b.home_z = court_spec.depth * 0.6
+	game.rules = MatchRules.new(0 if config.endless else Tuning.SET_POINTS).for_mode(config.mode)
 	game.setup(ball, players, bots)
 	game.set_bot_level(config.bot_level)
 	game.aim_sens = config.aim_sens

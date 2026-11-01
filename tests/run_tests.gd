@@ -34,6 +34,10 @@ func _run() -> void:
 	_test_aim_assist()
 	print("== quadra por modo (CourtSpec) ==")
 	_test_court_spec()
+	print("== 2v2: ordem de saque ==")
+	_test_serve_order()
+	print("== 2v2 bot x bot (20 min): ninguém toca duas vezes seguidas ==")
+	_test_two_touch_rule()
 	print("== plano de contato ==")
 	_test_contact_plan()
 	print("== HitResolver (mesmos números do código antigo) ==")
@@ -458,6 +462,82 @@ func _test_court_spec() -> void:
 			if int(e["type"]) == BallSim.Ev.CROSS or int(e["type"]) == BallSim.Ev.ANTENNA:
 				seen = int(e["type"])
 	_check(seen == BallSim.Ev.CROSS, "2v2: bola em x = 3,8 passa dentro das antenas")
+	_free_main(main)
+
+
+func _make_main_2v2(autoplay: bool) -> Node:
+	var cfg := MatchConfig.new()
+	cfg.mode = MatchConfig.Mode.TWO_V_TWO
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	main.set("config", cfg)
+	main.set("autoplay", autoplay)
+	root.add_child(main)
+	return main
+
+
+## Dá o ponto para `team` e espera o próximo saque.
+func _point_to(game: Game, team: int) -> void:
+	game.state = Game.State.PLAY
+	game.rally_over = false
+	game._award(team, "Teste")
+	for _i in int((Tuning.POINT_PAUSE + 0.1) / DT):
+		game.tick(DT)
+
+
+func _test_serve_order() -> void:
+	var main := _make_main_2v2(true)
+	var game: Game = main.get("game")
+	game.bots.clear()
+	var t0 := game.teams[0].players
+	var t1 := game.teams[1].players
+	_check(game.players.size() == 4 and t0.size() == 2 and t1.size() == 2, "2v2: dois jogadores por time")
+	var order := [game.server]
+	for team in [0, 1, 0, 0, 1, 0, 1]:
+		_point_to(game, team)
+		order.append(game.server)
+	var want := [t0[0], t0[0], t1[0], t0[1], t0[1], t1[1], t0[0], t1[0]]
+	_check(order == want, "sideout alterna o sacador do time; pontuar sacando mantém")
+	var partner := game.teams[game.server_team].other(game.server)
+	_check(absf(partner.position.z) < game.court.depth and not partner.serving, "parceiro do sacador fica dentro da quadra")
+	_free_main(main)
+
+
+func _test_two_touch_rule() -> void:
+	var main := _make_main_2v2(true)
+	var game: Game = main.get("game")
+	game.set_bot_level(1)
+	var st := {"prev": null, "prev_team": -1, "prev_block": false, "twice": 0, "points": 0,
+			"last": 0.0, "gap": 0.0, "by": {}, "rallies": 0, "touches": 0}
+	var mark := func() -> void:
+		st["gap"] = maxf(float(st["gap"]), game.time - float(st["last"]))
+		st["last"] = game.time
+	game.touch_made.connect(func(p: Player, grade: String, _q: float) -> void:
+		mark.call()
+		if grade == "SAQUE":
+			st["prev"] = p
+			st["prev_team"] = p.team
+			st["prev_block"] = false
+			return
+		if p == st["prev"] and p.team == int(st["prev_team"]) and not bool(st["prev_block"]):
+			st["twice"] += 1
+		st["by"][p] = int(st["by"].get(p, 0)) + 1
+		st["prev"] = p
+		st["prev_team"] = p.team
+		st["prev_block"] = game.last_kind == Game.Act.BLOCK)
+	game.point_scored.connect(func(_t: int, _w: String) -> void:
+		st["points"] += 1
+		st["touches"] += game.rally_touches
+		st["prev"] = null
+		mark.call())
+	for _i in int(1200.0 / DT):
+		game.tick(DT)
+	var avg := float(st["touches"]) / maxf(float(st["points"]), 1.0)
+	print("  pontos=%d  placar=%d x %d  média de toques=%.1f  toques por jogador=%s  maior tempo sem evento=%.1f s" % [
+			st["points"], game.rules.points[0], game.rules.points[1], avg, (st["by"] as Dictionary).values(), st["gap"]])
+	_check(int(st["twice"]) == 0, "nenhum toque seguido do mesmo jogador (%d)" % st["twice"])
+	_check((st["by"] as Dictionary).size() == 4, "os quatro jogadores tocam na bola")
+	_check(int(st["points"]) > 40 and float(st["gap"]) < 8.0, "partida anda e nunca trava")
+	_check(avg >= 3.0, "média de toques por rally >= 3 (%.1f)" % avg)
 	_free_main(main)
 
 
