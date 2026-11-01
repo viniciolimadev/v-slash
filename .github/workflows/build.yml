@@ -150,7 +150,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   # Tag v* (ex.: v1.0.0): APK + AAB release assinados, GitHub Release e, se houver segredos,
   # trilha interna da Play e itch.io. Segredos e variáveis: docs/SDD-fase-5.md (3.1) e docs/LANCAMENTO.md.
