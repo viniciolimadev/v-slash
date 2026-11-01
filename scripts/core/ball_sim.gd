@@ -21,6 +21,7 @@ var wobble_phase := 0.0
 var clock := 0.0                    # relógio do Game (os bloqueios são marcados nele)
 var blocks: Array[Block] = []
 var stopped := false                # parada nas mãos do bloqueio, esperando o Game relançar
+var court := CourtSpec.default_spec()   # antenas e comprimento da rede
 
 
 func copy() -> BallSim:
@@ -37,6 +38,7 @@ func copy() -> BallSim:
 	b.clock = clock
 	b.blocks = blocks.duplicate()
 	b.stopped = stopped
+	b.court = court
 	return b
 
 
@@ -147,7 +149,7 @@ func advance(dt: float) -> Array:
 		_move(t_cross)
 		remaining -= t_cross
 		pos.z = 0.0
-		if absf(pos.x) <= Tuning.NET_HALF_LEN and pos.y < Tuning.NET_HEIGHT + Tuning.BALL_RADIUS:
+		if absf(pos.x) <= court.net_half_len and pos.y < Tuning.NET_HEIGHT + Tuning.BALL_RADIUS:
 			# bateu na rede: volta para o lado de quem tocou
 			net_hits += 1
 			var from_side := -signf(vel.z)
@@ -156,7 +158,7 @@ func advance(dt: float) -> Array:
 			wobble_amp = 0.0        # bola morta na rede não flutua mais
 			events.append({"type": Ev.NET, "pos": pos})
 		else:
-			var outside := absf(pos.x) > Tuning.COURT_HALF_W + Tuning.BALL_RADIUS
+			var outside := absf(pos.x) > court.half_w + Tuning.BALL_RADIUS
 			events.append({"type": Ev.ANTENNA if outside else Ev.CROSS, "pos": pos})
 			pos.z = signf(vel.z) * 1e-4
 	return events

@@ -7,6 +7,7 @@ enum Mode { HELD, FLYING, DEAD }
 var sim := BallSim.new()
 var mode: int = Mode.HELD
 var holder: Node3D = null
+var court := CourtSpec.default_spec()   # passada a cada BallSim novo
 
 var _mesh: MeshInstance3D
 var _dead_vel := Vector3.ZERO
@@ -40,6 +41,7 @@ func hold(by: Node3D) -> void:
 	holder = by
 	mode = Mode.HELD
 	sim = BallSim.new()
+	sim.court = court
 	_follow_holder()
 
 
@@ -47,6 +49,7 @@ func launch(from: Vector3, velocity: Vector3, grav: float = Tuning.GRAVITY) -> v
 	holder = null
 	mode = Mode.FLYING
 	sim = BallSim.new()
+	sim.court = court
 	sim.pos = from
 	sim.vel = velocity
 	sim.g = grav

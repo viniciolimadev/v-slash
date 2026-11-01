@@ -113,13 +113,14 @@ func skip() -> void:
 
 
 func _feed() -> void:
-	var w := Tuning.COURT_HALF_W - 0.6
+	var w := game.court.half_w - 0.6
+	var d := game.court.depth - 0.6
 	if step == Step.MOVE:
 		var to := human.position + Vector3(2.3 if human.position.x < 0.5 else -2.3, 0.0, 0.6)
-		game.feed_ball(Vector3(clampf(to.x, -w, w), 0.0, clampf(to.z, 1.5, Tuning.COURT_DEPTH - 0.6)), MOVE_FLIGHT)
+		game.feed_ball(Vector3(clampf(to.x, -w, w), 0.0, clampf(to.z, 1.5, d)), MOVE_FLIGHT)
 	else:
 		var to := human.position + Vector3(0.6, 0.0, 0.3)
-		game.feed_ball(Vector3(clampf(to.x, -w, w), 0.0, clampf(to.z, 1.5, Tuning.COURT_DEPTH - 0.6)),
+		game.feed_ball(Vector3(clampf(to.x, -w, w), 0.0, clampf(to.z, 1.5, d)),
 				Tuning.T_RECEIVE)
 
 

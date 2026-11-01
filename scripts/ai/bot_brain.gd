@@ -8,6 +8,9 @@ extends RefCounted
 var p: Player
 var game: Game
 var level := 1
+## Parceiro do humano no 2v2: só se posiciona. Quem toca é sempre quem você controla
+## (com o dedo no botão o controle não troca; ao soltar, o toque vai para quem tem o plano).
+var partner_mode := false
 var rng := RandomNumberGenerator.new()
 
 var _plan_seen := -1
@@ -31,14 +34,32 @@ func _init(player: Player, g: Game, lvl: int) -> void:
 
 func set_level(lvl: int) -> void:
 	level = clampi(lvl, 0, 2)
+	if not p.is_human:
+		_apply_level()
+
+
+func _apply_level() -> void:
 	p.speed = float(Tuning.BOT_SPEED[level])
+	if game.teams.size() > p.team and game.teams[p.team].players.size() > 1:
+		p.speed *= Tuning.BOT_SPEED_2V2      # dois cobrindo a quadra: cada um corre menos
 	p.can_dive = level >= 1             # o Fácil não faz peixinho
 
 
 func tick(_dt: float) -> void:
+	if p.is_human:
+		return              # 2v2: você está controlando este jogador agora
+	_apply_level()          # volta a jogar como bot depois de você largar o controle
 	p.move_input = Vector2.ZERO
+	if partner_mode:
+		p.holding = false
+		var plan := game.plan
+		if plan != null and plan.player == p and game.state == Game.State.PLAY:
+			_go_to(game.plan_view_pos(plan))
+		else:
+			_go_to(_idle_target(Game.side_of_team(p.team)))
+		return
 	var s := Game.side_of_team(p.team)
-	var home := Vector3(0.0, 0.0, s * 4.2)
+	var home := _idle_target(s)
 
 	if game.state == Game.State.SERVE_WAIT or game.state == Game.State.SERVE_TOSS:
 		p.holding = false
@@ -152,6 +173,13 @@ func _block_tick(plan: ContactPlan) -> bool:
 	return true
 
 
+## Onde ficar sem bola: no 1v1, a base; no 2v2, a posição do papel (PartnerBrain).
+func _idle_target(s: float) -> Vector3:
+	if game.teams.size() > p.team and game.teams[p.team].players.size() > 1:
+		return PartnerBrain.target_for(p, game)
+	return Vector3(0.0, 0.0, s * 4.2)
+
+
 func _go_to(target: Vector3) -> void:
 	var d := Vector2(target.x - p.position.x, target.z - p.position.z)
 	var dist := d.length()
@@ -162,13 +190,13 @@ func _go_to(target: Vector3) -> void:
 
 func _clearly_out() -> bool:
 	var lp := game.land_view()
-	return absf(lp.x) > Tuning.COURT_HALF_W + 0.3 or absf(lp.z) > Tuning.COURT_DEPTH + 0.3
+	return absf(lp.x) > game.court.half_w + 0.3 or absf(lp.z) > game.court.depth + 0.3
 
 
 func _choose_aim(act: int) -> Vector3:
 	var s := Game.side_of_team(p.team)
 	if act == Game.Act.RECEIVE:
-		return Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s) + _noise(0.3)
+		return game.spot(p.team, Tuning.SETTER_SPOT) + _noise(0.3)
 	if act == Game.Act.SET_BALL:
 		return game.default_aim(p) + _noise(0.2)
 	if act == Game.Act.ATTACK:
@@ -186,7 +214,7 @@ func _attack_target() -> Vector3:
 	if level == 2 and not foe_blocks:
 		dink_chance *= 0.4
 	if rng.randf() < dink_chance:
-		var w := Tuning.COURT_HALF_W - 0.8
+		var w := game.court.half_w - 0.8
 		return Vector3(rng.randf_range(-w, w), 0.0, foe_side * rng.randf_range(1.4, 2.0))
 	if level == 2 and foe_blocks:
 		return _away_from_block(foe)
@@ -195,8 +223,8 @@ func _attack_target() -> Vector3:
 
 func _away_from_block(foe: Player) -> Vector3:
 	var foe_side := -Game.side_of_team(p.team)
-	var w := Tuning.COURT_HALF_W - 0.6
-	var d := Tuning.COURT_DEPTH - 0.6
+	var w := game.court.half_w - 0.6
+	var d := game.court.depth - 0.6
 	var from := game.plan.pos if game.plan != null else p.position
 	var best := Vector3(0.0, 0.0, foe_side * d * 0.6)
 	var best_gap := -INF
@@ -214,8 +242,8 @@ func _away_from_block(foe: Player) -> Vector3:
 ## Ponto na quadra adversária. Fácil: perto de você. Médio: aleatório. Difícil: longe de você.
 func _court_target(min_depth: float) -> Vector3:
 	var foe_side := -Game.side_of_team(p.team)
-	var w := Tuning.COURT_HALF_W - 0.6
-	var d := Tuning.COURT_DEPTH - 0.6
+	var w := game.court.half_w - 0.6
+	var d := game.court.depth - 0.6
 	var foe := game.opponent_of(p.team)
 	var best := Vector3(0.0, 0.0, foe_side * d * 0.6)
 	var best_score := -INF

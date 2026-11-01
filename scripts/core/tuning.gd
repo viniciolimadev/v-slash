@@ -4,10 +4,11 @@ extends RefCounted
 ## Convenção: rede no plano z = 0. Você (time 0) joga em z > 0; o bot (time 1) em z < 0.
 
 # --- Quadra (metros) ---
-const COURT_HALF_W := 3.5          # meia largura: quadra de 7 m (1v1 pede quadra menor que 9 m)
-const COURT_DEPTH := 7.0           # fundo de cada lado
+# (meia largura, fundo de cada lado) por modo; quem usa lê de CourtSpec
+const COURT_1V1 := Vector2(3.5, 7.0)   # quadra de 7 m de largura (1v1 pede quadra menor que 9 m)
+const COURT_2V2 := Vector2(4.0, 8.0)   # 8 × 8 por lado, como no vôlei de praia
 const NET_HEIGHT := 2.43
-const NET_HALF_LEN := 4.2          # a rede passa um pouco das antenas
+const NET_OVERHANG := 0.7          # m que a rede passa das antenas, de cada lado
 const LINE_TOLERANCE := 0.05       # bola na linha = dentro
 
 # --- Partida ---
@@ -17,6 +18,7 @@ const WIN_BY := 2                  # vantagem mínima para fechar o set
 const POINT_PAUSE := 1.8           # s entre um ponto e o próximo saque
 const SET_PAUSE := 3.0             # s de faixa "Fim do set" antes do saque seguinte
 const MATCH_END_DELAY := 2.0       # s de comemoração antes da tela de resultado
+const HINT_SECS := 4.0             # s da dica de primeira partida 2v2
 
 # --- Bola ---
 const BALL_RADIUS := 0.16          # maior que a real (0,105) p/ ler na tela do celular
@@ -119,7 +121,8 @@ const AIM_MARGIN := 0.5            # a mira não sai da quadra: fica 0,5 m para 
 const AIM_MAGNET_RADIUS := 1.2     # saque/ataque: a mira gruda na zona mais próxima
 const RECEIVE_MAGNET_RADIUS := 1.8 # recepção: gruda no levantador
 const ASSIST_KEEP_IN_Q := 0.7      # toque BOM ou melhor: a bola não sai da quadra
-# zonas de saque/ataque na quadra adversária: (x, distância da rede, largada?); x > 0 = sua direita
+# zonas de saque/ataque na quadra adversária: (x, distância da rede, largada?); x > 0 = sua direita.
+# Em metros da quadra do 1v1 (CourtSpec.scaled leva para a quadra do modo).
 const ATTACK_ZONES := [
 	["FUNDO", Vector2(0.0, 5.8), false],
 	["FUNDO ESQ", Vector2(-2.6, 5.8), false],
@@ -128,10 +131,12 @@ const ATTACK_ZONES := [
 	["CURTA ESQ", Vector2(-2.2, 1.8), true],
 	["CURTA DIR", Vector2(2.2, 1.8), true],
 ]
-const SETTER_SPOT := Vector2(0.8, 1.6)   # (x, z) do levantamento do time 0; o bot usa o espelho
+const SETTER_SPOT := Vector2(0.8, 1.6)   # (x, z) do levantamento do time 0 no 1v1; o bot usa o espelho
 
 # --- Bot: índice 0 = fácil, 1 = médio, 2 = difícil ---
 const BOT_NAMES := ["Fácil", "Médio", "Difícil"]
+const PARTNER_LEVEL := 1           # seu parceiro no 2v2 joga como o Médio
+const BOT_SPEED_2V2 := 0.9         # multiplica BOT_SPEED no 2v2 (dois cobrem a quadra; rally menor)
 const BOT_SPEED := [4.6, 5.4, 6.0]
 const BOT_REACTION := [0.4, 0.3, 0.22]
 const BOT_TIMING_SIGMA := [0.13, 0.08, 0.045]

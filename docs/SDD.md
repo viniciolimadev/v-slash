@@ -338,6 +338,8 @@ Detalhamento completo: [SDD-fase-2.md](SDD-fase-2.md). Onde os dois divergirem, 
 
 Detalhamento completo: [SDD-fase-3.md](SDD-fase-3.md). Onde os dois divergirem, vale o detalhado.
 
+**Implementada** (versão 0.4.0). Desvios do esboço: decisões B3-6…B3-10 do SDD da fase.
+
 | Mudança | Design |
 |---|---|
 | Regra real | `Game` guarda `last_player`; plano exclui `last_player` do time que acabou de tocar (ninguém toca duas vezes seguidas). `MAX_TOUCHES = 3` no modo 2v2. |

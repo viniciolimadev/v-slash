@@ -1,8 +1,9 @@
-# Vôlei Mobile — Fase 2
+# Vôlei Mobile — Fase 3
 
 Vôlei 1v1 contra bot: **bola cinemática + anel de timing + gesto segura → mira → solta**.
 Partida em **melhor de 3 sets de 15** (vantagem de 2), com título, escolha do bot, tutorial, pausa, opções e resultado; progresso salvo no aparelho.
 Fase 2: saque **por baixo / flutuante / viagem**, **bloqueio**, **largada**, **peixinho** e stamina (experimento, desligada).
+Fase 3: modo **2v2** (quadra 8 × 8, parceiro IA): você controla sempre quem vai tocar na bola; ninguém toca duas vezes seguidas.
 Tudo é gerado por código (formas simples). Godot **4.7**, renderizador Compatibility (Android/iOS/Web).
 
 ## Abrir e jogar
@@ -15,6 +16,7 @@ Tudo é gerado por código (formas simples). Godot **4.7**, renderizador Compati
 |---|---|---|
 | Andar | polegar esquerdo (o joystick nasce onde você encosta) | WASD / setas |
 | Tocar na bola | segure na metade direita → arraste para mirar → **solte** | segure **Espaço** (mira padrão) ou clique-segure-arraste na direita |
+| Modo | na escolha do bot: **1v1 · 2v2** (cada modo tem seus níveis e recordes) | mouse |
 | Tipo de saque | antes do seu saque: **POR BAIXO · FLUTUANTE · VIAGEM** no topo direito (fica salvo) | mouse |
 | Pausa | botão **II** ou voltar do Android (trocar de app também pausa) | mouse |
 
@@ -60,6 +62,8 @@ Opções (título ou pausa): sensibilidade da mira, modo canhoto (joystick e bot
 | peixinho | `DIVE_REACH`, `DIVE_Q_MAX`, `DIVE_RECOVER` |
 | stamina (experimento) | `STAMINA_ENABLED` e os `STAMINA_*` / `TIRED_*` |
 | bot saca/bloqueia/larga mais ou menos | `BOT_SERVE_MIX`, `BOT_BLOCK_CHANCE`, `BOT_BLOCK_SIGMA`, `BOT_DINK_CHANCE` |
+| tamanho da quadra (1v1 / 2v2) | `COURT_1V1`, `COURT_2V2`, `NET_OVERHANG` |
+| 2v2: parceiro e dupla do bot | `PARTNER_LEVEL`, `BOT_SPEED_2V2` |
 
 Equilíbrio dos valores atuais (`godot --headless --script res://tests/balance_sim.gd -- --matches=48`: 4 × 20 min por célula; "humano" roteirizado com reação e erro de timing, que não bloqueia; o "bom" ataca longe das mãos do bot quando ele está na rede):
 
@@ -69,6 +73,8 @@ Equilíbrio dos valores atuais (`godot --headless --script res://tests/balance_s
 | casual (reação 0,4 s, erro 90 ms) | 50% | 26% | 14% |
 
 Partida inteira, casual × Fácil: 48 sementes → vence **46%**, média **8,8 min**; no CI (`_test_match_duration`, 8 sementes) vence 2 de 8, média 8,4 min.
+
+2v2 (testes do CI, 8 sementes): casual × Fácil vence 4 de 8, média **8,3 min**; rally médio do humano bom × Médio: 10,3 toques no 2v2 contra 6,5 no 1v1.
 
 ## Testar no celular sem instalar nada (CI)
 
@@ -137,6 +143,9 @@ docs/                  roadmap, SDDs, padrão de trabalho
 | `scripts/core/block.gd` | mãos do bloqueio (usadas pela física) |
 | `scripts/core/tuning.gd` | todos os números |
 | `scripts/ai/bot_brain.gd` | IA (usa o mesmo preditor) |
+| `scripts/ai/partner_brain.gd` | 2v2: posição sem bola por papel (recepção, levantador, ataque, defesa) |
+| `scripts/core/team.gd` | jogadores do time e ordem de saque |
+| `scripts/core/court_spec.gd` | medidas da quadra por modo |
 | `scripts/entities/ball.gd` | visual da bola |
 | `scripts/entities/player.gd` | movimento, pulo automático, animação |
 | `scripts/entities/court.gd` | quadra, rede, antenas |
@@ -152,4 +161,4 @@ docs/                  roadmap, SDDs, padrão de trabalho
 
 ## Próximas fases
 
-2v2 → Fase 3 · arte e som → Fase 4. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).
+Arte e som → Fase 4 · lançamento → Fase 5. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).

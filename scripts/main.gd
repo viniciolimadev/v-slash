@@ -15,8 +15,11 @@ var autoplay := false               # os dois lados controlados pela IA
 var config: MatchConfig = null      # null = padrão (rally infinito contra o Fácil)
 var save: SaveData = null           # só com o App: habilita Opções e Sair na pausa
 var game: Game
+var court_spec: CourtSpec           # quadra do modo da config
 var human: Player
 var foe: Player
+var partner: Player = null          # 2v2: seu parceiro (IA)
+var foe2: Player = null             # 2v2: o segundo da dupla adversária
 var controls: TouchControls
 var hud: Hud
 var markers: Markers
@@ -41,7 +44,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	if not autoplay:
-		human.move_input = controls.get_move()
+		_me().move_input = controls.get_move()
 	game.tick(delta)
 	if tutorial != null:
 		tutorial.tick(delta)
@@ -49,8 +52,8 @@ func _physics_process(delta: float) -> void:
 
 func _process(_delta: float) -> void:
 	markers.refresh()
-	controls.action_label = game.action_label(human)
-	controls.action_hot = game.is_hot(human)
+	controls.action_label = game.action_label(_me())
+	controls.action_hot = game.is_hot(_me())
 	controls.queue_redraw()
 	hud.set_board(game.rules, game.rally_touches, game.best_rally)
 	hud.show_serve_picker(_can_pick_serve(), game.serve_type[human.team])
@@ -73,7 +76,10 @@ func _build_world() -> void:
 	sun.light_energy = 1.0
 	add_child(sun)
 
-	add_child(Court.new())
+	court_spec = CourtSpec.for_mode(config.mode)
+	var court := Court.new()
+	court.spec = court_spec
+	add_child(court)
 
 	# câmera atrás do seu lado, alta o bastante para ver as duas quadras
 	cam = Camera3D.new()
@@ -81,7 +87,12 @@ func _build_world() -> void:
 	cam.near = 0.5
 	cam.far = 200.0
 	add_child(cam)
-	cam.look_at_from_position(Vector3(0.0, 14.0, 21.0), Vector3(0.0, 0.0, 0.5), Vector3.UP)
+	var eye := Vector3(0.0, 14.0, 21.0)
+	if config.mode == MatchConfig.Mode.TWO_V_TWO:
+		# quadra 8 × 8: mais alto e mais aberto para caber a quadra inteira e os sacadores
+		cam.fov = 40.0
+		eye = Vector3(0.0, 16.0, 24.0)
+	cam.look_at_from_position(eye, Vector3(0.0, 0.0, 0.5), Vector3.UP)
 	cam.make_current()
 
 
@@ -92,9 +103,18 @@ func _build_match() -> void:
 	foe = Player.new()
 	add_child(foe)
 	foe.setup(1, false, AWAY_COLOR)
+	var two := config.mode == MatchConfig.Mode.TWO_V_TWO
+	if two:
+		partner = Player.new()
+		add_child(partner)
+		partner.setup(0, false, HOME_COLOR.darkened(0.25))
+		foe2 = Player.new()
+		add_child(foe2)
+		foe2.setup(1, false, AWAY_COLOR.darkened(0.25))
 	var ball := Ball.new()
 	add_child(ball)
 	game = Game.new()
+	game.court = court_spec
 	add_child(game)
 	var players: Array[Player] = [human, foe]
 	var bots: Array[BotBrain] = []
@@ -102,11 +122,25 @@ func _build_match() -> void:
 		bots.append(BotBrain.new(foe, game, config.bot_level))
 	if autoplay:
 		bots.append(BotBrain.new(human, game, 1))
-	game.rules = MatchRules.new(0 if config.endless else Tuning.SET_POINTS)
+	if two:
+		players = [human, partner, foe, foe2]
+		bots.append(BotBrain.new(foe2, game, config.bot_level))
+		bots.append(BotBrain.new(partner, game, Tuning.PARTNER_LEVEL))
+		if not autoplay:
+			# quando o controle passa para o parceiro, este jogador vira IA de parceiro
+			bots.append(BotBrain.new(human, game, Tuning.PARTNER_LEVEL))
+			for b in bots:
+				b.partner_mode = b.p.team == human.team
+	game.rules = MatchRules.new(0 if config.endless else Tuning.SET_POINTS).for_mode(config.mode)
 	game.setup(ball, players, bots)
 	game.set_bot_level(config.bot_level)
 	game.aim_sens = config.aim_sens
 	game.serve_type[human.team] = config.serve_type
+	if two and not autoplay:
+		partner.set_ring(1, false)
+		game.control_changed.connect(func(p: Player) -> void:
+			for q in game.teams[p.team].players:
+				q.set_ring(2 if q == p else 1, q == p))
 	stats.attach(game)
 	markers = Markers.new()
 	add_child(markers)
@@ -116,6 +150,15 @@ func _build_match() -> void:
 		tutorial.setup(game, human, markers)
 		add_child(tutorial)
 		tutorial.finished.connect(func(skipped: bool) -> void: tutorial_finished.emit(skipped))
+
+
+## Primeira partida 2v2: faixa explicando a troca de controle (uma vez por save).
+func _show_first_hint() -> void:
+	if config.mode != MatchConfig.Mode.TWO_V_TWO or autoplay or save == null or save.hint_2v2_done:
+		return
+	hud.banner("O controle passa para quem vai tocar na bola", Color(1.0, 0.95, 0.65), Tuning.HINT_SECS)
+	save.hint_2v2_done = true
+	save.save_file()
 
 
 func _build_ui() -> void:
@@ -156,6 +199,12 @@ func _build_ui() -> void:
 	game.point_scored.connect(_on_point)
 	game.set_over.connect(_on_set_over)
 	game.match_over.connect(_on_match_over)
+	_show_first_hint()
+
+
+## Quem você controla agora (no 2v2 muda durante o rally; no 1v1 é sempre `human`).
+func _me() -> Player:
+	return game.human if game.human != null else human
 
 
 func _setup_input() -> void:
@@ -177,17 +226,17 @@ func _add_keys(action: String, keys: Array) -> void:
 
 func _on_action_pressed() -> void:
 	if not autoplay:
-		game.human_press(human)
+		game.human_press(_me())
 
 
 func _on_action_released() -> void:
 	if not autoplay:
-		game.human_release(human)
+		game.human_release(_me())
 
 
 func _on_aim_dragged(rel: Vector2) -> void:
 	if not autoplay:
-		game.human_drag(human, rel)
+		game.human_drag(_me(), rel)
 
 
 func _on_reset() -> void:
@@ -204,7 +253,7 @@ func _on_level() -> void:
 ## Escolher o saque só faz sentido parado no seu saque (no tutorial, não).
 func _can_pick_serve() -> bool:
 	return not autoplay and tutorial == null and game.state == Game.State.SERVE_WAIT \
-			and game.server == human and not game.human_aiming
+			and game.server == _me() and not game.human_aiming
 
 
 func _on_serve_type(kind: int) -> void:
@@ -217,12 +266,12 @@ func _on_serve_type(kind: int) -> void:
 
 func _on_served(p: Player, _kind: int, grade: String) -> void:
 	# saque com timing mostra a nota como os outros toques; por baixo não tem nota
-	if p == human and grade != "SAQUE":
+	if p == _me() and grade != "SAQUE":
 		hud.popup(grade, Color(0.45, 1.0, 0.55) if grade == "PERFEITO!" else Color(1.0, 0.95, 0.65))
 
 
 func _on_touch(p: Player, grade: String, quality: float) -> void:
-	if p != human or grade == "SAQUE":
+	if p != _me() or grade == "SAQUE":
 		return
 	var perfect := quality >= 1.0
 	hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65))
@@ -231,7 +280,7 @@ func _on_touch(p: Player, grade: String, quality: float) -> void:
 
 
 func _on_whiff(p: Player, why: String) -> void:
-	if p == human:
+	if p == _me():
 		hud.popup(why, Color(1.0, 0.45, 0.4))
 
 
@@ -260,7 +309,9 @@ func finish_match() -> void:
 	if _finished or game.rules.winner < 0:
 		return
 	_finished = true
-	match_finished.emit(MatchResult.new(game.rules.winner, config.bot_level, game.rules.history, stats))
+	var r := MatchResult.new(game.rules.winner, config.bot_level, game.rules.history, stats)
+	r.mode = config.mode
+	match_finished.emit(r)
 
 
 # ---------------------------------------------------------------- pausa e opções

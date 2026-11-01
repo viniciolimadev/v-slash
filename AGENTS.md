@@ -14,7 +14,7 @@ Jogo de vôlei para celular em **Godot 4.7 / GDScript**, renderer Compatibility 
 | [docs/SDD.md](docs/SDD.md) | arquitetura, invariantes, ADRs, decisões de produto (como) |
 | `docs/SDD-fase-N.md` | design de implementação da fase atual — **a fonte da verdade para a tarefa** |
 
-Fase atual: **Fase 2 implementada** ([docs/SDD-fase-2.md](docs/SDD-fase-2.md); falta o teste no celular); a **Fase 3** segue [docs/SDD-fase-3.md](docs/SDD-fase-3.md).
+Fase atual: **Fase 3 implementada** ([docs/SDD-fase-3.md](docs/SDD-fase-3.md); falta o teste no celular); a **Fase 4** segue [docs/SDD-fase-4.md](docs/SDD-fase-4.md).
 
 ## Mapa do código
 
@@ -24,6 +24,9 @@ scripts/core/ball_sim.gd   física exata da bola + preditor (mesmo código)
 scripts/core/game.gd       regras, plano de contato, toque, pontos
 scripts/core/tuning.gd     TODOS os números de feel
 scripts/ai/bot_brain.gd    bot (lê o mesmo plano, chama attempt_hit)
+scripts/ai/partner_brain.gd  2v2: posição sem bola por papel
+scripts/core/court_spec.gd medidas da quadra por modo (1v1 / 2v2)
+scripts/core/team.gd       jogadores do time e ordem de saque
 scripts/entities/          Player, Ball (visual), Court
 scripts/ui/                TouchControls, Hud, Markers
 tests/run_tests.gd         testes headless

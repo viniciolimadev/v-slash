@@ -3,6 +3,9 @@ extends RefCounted
 ## Parâmetros de uma partida, definidos por quem abre main.tscn antes de ela entrar na árvore.
 ## Sem config (F5 na cena, --autoplay, testes) = padrão: rally infinito contra o Fácil.
 
+enum Mode { ONE_V_ONE, TWO_V_TWO }
+
+var mode: int = Mode.ONE_V_ONE
 var bot_level := 0
 var endless := true
 var tutorial := false
@@ -12,8 +15,9 @@ var vibration := true
 var serve_type := ServeType.Kind.UNDER
 
 
-static func from_save(save: SaveData, level: int) -> MatchConfig:
+static func from_save(save: SaveData, level: int, p_mode: int = Mode.ONE_V_ONE) -> MatchConfig:
 	var c := MatchConfig.new()
+	c.mode = p_mode
 	c.bot_level = level
 	c.endless = false
 	c.aim_sens = save.aim_sens

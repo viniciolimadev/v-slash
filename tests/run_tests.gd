@@ -32,6 +32,18 @@ func _run() -> void:
 	_test_aim()
 	print("== assistência de mira ==")
 	_test_aim_assist()
+	print("== quadra por modo (CourtSpec) ==")
+	_test_court_spec()
+	print("== 2v2: ordem de saque ==")
+	_test_serve_order()
+	print("== 2v2 bot x bot (20 min): ninguém toca duas vezes seguidas ==")
+	_test_two_touch_rule()
+	print("== 2v2: troca de controle ==")
+	_test_control_switch()
+	print("== 2v2: posições do parceiro ==")
+	_test_partner_positions()
+	print("== 2v2: levantamento para o parceiro ==")
+	_test_sets_2v2()
 	print("== plano de contato ==")
 	_test_contact_plan()
 	print("== HitResolver (mesmos números do código antigo) ==")
@@ -66,6 +78,8 @@ func _run() -> void:
 	_test_app_flow()
 	print("== duração: humano casual x Fácil ==")
 	_test_match_duration()
+	print("== 2v2: duração humano casual x Fácil e rally x Médio ==")
+	_test_match_duration_2v2()
 	print("falhas: %d" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -138,14 +152,20 @@ func _test_physics() -> void:
 
 
 func _test_camera() -> void:
-	var main := _make_main(true)
+	_check_framing(_make_main(true), "1v1")
+	_check_framing(_make_main_2v2(true), "2v2")
+
+
+func _check_framing(main: Node, mode_name: String) -> void:
 	var cam: Camera3D = main.get("cam")
+	var court := (main.get("game") as Game).court
 	for aspect: float in [16.0 / 9.0, 20.0 / 9.0]:
 		var proj := Projection.create_perspective(cam.fov, aspect, cam.near, cam.far)
 		var view := cam.global_transform.affine_inverse()
 		var names := ["fundo dele", "rede", "sua linha de fundo", "seu sacador"]
-		var pts := [Vector3(0, 0, -7), Vector3(0, 2.43, 0), Vector3(3.5, 0, 7), Vector3(0, 0, 7.9)]
-		var line := "  aspecto %.2f:" % aspect
+		var pts := [Vector3(0, 0, -court.depth), Vector3(0, 2.43, 0), Vector3(court.half_w, 0, court.depth),
+				Vector3(0, 0, court.depth + court.serve_back)]
+		var line := "  %s aspecto %.2f:" % [mode_name, aspect]
 		var all_in := true
 		for i in pts.size():
 			var w: Vector3 = view * Vector3(pts[i])
@@ -156,7 +176,7 @@ func _test_camera() -> void:
 			if absf(ndc.x) > 1.0 or absf(ndc.y) > 1.0:
 				all_in = false
 		print(line)
-		_check(all_in, "quadra inteira + sacador visíveis no aspecto %.2f" % aspect)
+		_check(all_in, "%s: quadra inteira + sacador visíveis no aspecto %.2f" % [mode_name, aspect])
 	_free_main(main)
 
 
@@ -394,7 +414,7 @@ func _test_aim_assist() -> void:
 	game.human_press(human)
 	game.human_drag(human, Vector2(5000.0, -5000.0))
 	var a: Vector3 = game.human_aim
-	_check(Game.is_inside(a) and absf(a.x) <= Tuning.COURT_HALF_W - Tuning.AIM_MARGIN + 0.01,
+	_check(game.is_inside(a) and absf(a.x) <= game.court.half_w - Tuning.AIM_MARGIN + 0.01,
 			"mira presa dentro da quadra (%s)" % a)
 	# ímã: perto do canto do fundo gruda em FUNDO DIR/ESQ
 	game.human_aim = Vector3(2.0 * s, 0.0, -5.2 * s)
@@ -410,8 +430,8 @@ func _test_aim_assist() -> void:
 	# bot não ganha ímã de ataque/recepção
 	_check(game.aim_magnets(foe, Game.Act.ATTACK).is_empty(), "bot sem assistência de mira")
 	# toque bom: alvo fora da quadra é trazido para dentro
-	var k := Game.keep_inside(Vector3(9.0, 0.0, -12.0))
-	_check(Game.is_inside(k), "toque BOM não manda a bola para fora (%s)" % k)
+	var k := game.keep_inside(Vector3(9.0, 0.0, -12.0))
+	_check(game.is_inside(k), "toque BOM não manda a bola para fora (%s)" % k)
 	_free_main(main)
 
 
@@ -428,6 +448,250 @@ func _drag(index: int, pos: Vector2) -> InputEventScreenDrag:
 	e.index = index
 	e.position = pos
 	return e
+
+
+func _test_court_spec() -> void:
+	var one := CourtSpec.for_mode(MatchConfig.Mode.ONE_V_ONE)
+	var two := CourtSpec.for_mode(MatchConfig.Mode.TWO_V_TWO)
+	_check(one.half_w == 3.5 and one.depth == 7.0 and is_equal_approx(one.net_half_len, 4.2),
+			"1v1: quadra 7 × 7 por lado, rede até 4,2 m (como na Fase 2)")
+	_check(two.half_w == 4.0 and two.depth == 8.0, "2v2: quadra 8 × 8 por lado")
+	var p := Vector3(3.8, 0.0, -7.5)
+	_check(not one.is_inside(p) and two.is_inside(p), "o mesmo ponto é fora no 1v1 e dentro no 2v2")
+	_check(two.keep_inside(Vector3(9.0, 0.0, 12.0)).is_equal_approx(Vector3(3.7, 0.0, 7.7)), "keep_inside usa a quadra do modo")
+	_check(one.scaled(2.6, 5.8) == Vector2(2.6, 5.8), "1v1: zonas de mira nos mesmos metros de antes")
+	var cfg := MatchConfig.new()
+	cfg.mode = MatchConfig.Mode.TWO_V_TWO
+	var main := _make_main_cfg(cfg)
+	var game: Game = main.get("game")
+	_check(game.court.depth == 8.0 and game.ball.sim.court == game.court and game.human.court == game.court,
+			"partida 2v2: Game, bola e jogadores na quadra 8 × 8")
+	var antenna := BallSim.new()
+	antenna.court = game.court
+	antenna.pos = Vector3(3.8, 3.0, 1.0)
+	antenna.vel = BallSim.launch_velocity(antenna.pos, Vector3(3.8, Tuning.BALL_RADIUS, -3.0), 1.0)
+	var seen := -1
+	while not antenna.landed and seen < 0:
+		for e in antenna.advance(DT):
+			if int(e["type"]) == BallSim.Ev.CROSS or int(e["type"]) == BallSim.Ev.ANTENNA:
+				seen = int(e["type"])
+	_check(seen == BallSim.Ev.CROSS, "2v2: bola em x = 3,8 passa dentro das antenas")
+	_free_main(main)
+
+
+func _make_main_2v2(autoplay: bool) -> Node:
+	var cfg := MatchConfig.new()
+	cfg.mode = MatchConfig.Mode.TWO_V_TWO
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	main.set("config", cfg)
+	main.set("autoplay", autoplay)
+	root.add_child(main)
+	return main
+
+
+## Dá o ponto para `team` e espera o próximo saque.
+func _point_to(game: Game, team: int) -> void:
+	game.state = Game.State.PLAY
+	game.rally_over = false
+	game._award(team, "Teste")
+	for _i in int((Tuning.POINT_PAUSE + 0.1) / DT):
+		game.tick(DT)
+
+
+func _test_serve_order() -> void:
+	var main := _make_main_2v2(true)
+	var game: Game = main.get("game")
+	game.bots.clear()
+	var t0 := game.teams[0].players
+	var t1 := game.teams[1].players
+	_check(game.players.size() == 4 and t0.size() == 2 and t1.size() == 2, "2v2: dois jogadores por time")
+	var order := [game.server]
+	for team in [0, 1, 0, 0, 1, 0, 1]:
+		_point_to(game, team)
+		order.append(game.server)
+	var want := [t0[0], t0[0], t1[0], t0[1], t0[1], t1[1], t0[0], t1[0]]
+	_check(order == want, "sideout alterna o sacador do time; pontuar sacando mantém")
+	var partner := game.teams[game.server_team].other(game.server)
+	_check(absf(partner.position.z) < game.court.depth and not partner.serving, "parceiro do sacador fica dentro da quadra")
+	_free_main(main)
+
+
+func _test_two_touch_rule() -> void:
+	var main := _make_main_2v2(true)
+	var game: Game = main.get("game")
+	game.set_bot_level(1)
+	var st := {"prev": null, "prev_team": -1, "prev_block": false, "twice": 0, "points": 0,
+			"last": 0.0, "gap": 0.0, "by": {}, "rallies": 0, "touches": 0}
+	var mark := func() -> void:
+		st["gap"] = maxf(float(st["gap"]), game.time - float(st["last"]))
+		st["last"] = game.time
+	game.touch_made.connect(func(p: Player, grade: String, _q: float) -> void:
+		mark.call()
+		if grade == "SAQUE":
+			st["prev"] = p
+			st["prev_team"] = p.team
+			st["prev_block"] = false
+			return
+		if p == st["prev"] and p.team == int(st["prev_team"]) and not bool(st["prev_block"]):
+			st["twice"] += 1
+		st["by"][p] = int(st["by"].get(p, 0)) + 1
+		st["prev"] = p
+		st["prev_team"] = p.team
+		st["prev_block"] = game.last_kind == Game.Act.BLOCK)
+	game.point_scored.connect(func(_t: int, _w: String) -> void:
+		st["points"] += 1
+		st["touches"] += game.rally_touches
+		st["prev"] = null
+		mark.call())
+	var roles := {}
+	for i in int(1200.0 / DT):
+		game.tick(DT)
+		if i % 30 == 0:
+			for p in game.players:
+				roles[PartnerBrain.Role.keys()[PartnerBrain.role_of(p, game)]] = true
+	var avg := float(st["touches"]) / maxf(float(st["points"]), 1.0)
+	print("  pontos=%d  placar=%d x %d  média de toques=%.1f  toques por jogador=%s  maior tempo sem evento=%.1f s" % [
+			st["points"], game.rules.points[0], game.rules.points[1], avg, (st["by"] as Dictionary).values(), st["gap"]])
+	_check(int(st["twice"]) == 0, "nenhum toque seguido do mesmo jogador (%d)" % st["twice"])
+	_check((st["by"] as Dictionary).size() == 4, "os quatro jogadores tocam na bola")
+	_check(int(st["points"]) > 40 and float(st["gap"]) < 8.0, "partida anda e nunca trava")
+	_check(avg >= 3.0, "média de toques por rally >= 3 (%.1f)" % avg)
+	var want_roles := ["SERVE_PARTNER", "RECEIVE", "SETTER_PREP", "ATTACKER", "COVER", "FRONT", "DIGGER"]
+	var missing := want_roles.filter(func(r: String) -> bool: return not roles.has(r))
+	_check(missing.is_empty(), "todos os papéis de posição aparecem (faltou: %s)" % [missing])
+	_free_main(main)
+
+
+func _test_control_switch() -> void:
+	var main := _make_main_2v2(false)
+	var game: Game = main.get("game")
+	var me: Player = main.get("human")
+	var partner: Player = main.get("partner")
+	_check(game.human == me and me.is_human and not partner.is_human, "começa controlando o seu jogador")
+	game.state = Game.State.PLAY
+	game.plan = ContactPlan.new(0, 1, Game.Act.RECEIVE, game.time + 1.0, partner.position, partner)
+	game.tick(DT)
+	_check(game.human == partner and partner.is_human and not me.is_human, "plano do parceiro: o controle passa para ele")
+	game.human_press(partner)
+	game.plan = ContactPlan.new(0, 2, Game.Act.SET_BALL, game.time + 1.0, me.position, me)
+	game.tick(DT)
+	_check(game.human == partner, "com o dedo no botão, não troca")
+	game.cancel_aim()
+	game.tick(DT)
+	_check(game.human == me and not partner.holding, "soltou: troca para quem vai tocar")
+	_free_main(main)
+
+	# rally com humano roteirizado (sempre no jogador controlado): o outro nunca toca
+	main = _make_main_2v2(false)
+	game = main.get("game")
+	game.rng.seed = 4
+	var bad := [0, 0]
+	game.touch_made.connect(func(p: Player, _g: String, _q: float) -> void:
+		if p.team == 0:
+			bad[1] += 1
+			if not p.is_human:
+				bad[0] += 1)
+	var switches := [0]
+	game.control_changed.connect(func(_p: Player) -> void: switches[0] += 1)
+	var pressed := false
+	for _i in int(180.0 / DT):
+		pressed = _script_team_human(game, pressed)
+		game.tick(DT)
+	_check(bad[1] > 20 and bad[0] == 0, "só quem você controla toca do seu time (%d toques, %d do parceiro IA)" % [bad[1], bad[0]])
+	_check(switches[0] > 10, "o controle troca durante os rallies (%d trocas)" % switches[0])
+	_free_main(main)
+
+
+func _test_partner_positions() -> void:
+	var main := _make_main_2v2(true)
+	var game: Game = main.get("game")
+	var a: Player = game.teams[1].players[0]
+	var b: Player = game.teams[1].players[1]
+	var d := game.court.depth
+	# time 0 saca: a dupla do time 1 recebe lado a lado
+	var ta := PartnerBrain.target_for(a, game)
+	var tb := PartnerBrain.target_for(b, game)
+	_check(ta.x < -1.0 and tb.x > 1.0 and is_equal_approx(ta.z, tb.z) and absf(ta.z) > d * 0.5,
+			"recebendo o saque: lado a lado (%s, %s)" % [ta, tb])
+	game.state = Game.State.PLAY
+	game.last_team = 0
+	game.plan = ContactPlan.new(1, 1, Game.Act.RECEIVE, game.time + 1.0, Vector3(-2.0, 0.9, -5.0), a)
+	tb = PartnerBrain.target_for(b, game)
+	_check(absf(tb.z) < 2.5, "o colega recebe: o outro vai para o levantamento, perto da rede (%s)" % tb)
+	game.plan = ContactPlan.new(1, 2, Game.Act.SET_BALL, game.time + 1.0, Vector3(0.6, 2.2, -1.6), b)
+	ta = PartnerBrain.target_for(a, game)
+	_check(absf(ta.z) > 3.0 and absf(ta.z) < d * 0.6, "quem recebeu recua para a corrida do ataque (%s)" % ta)
+	# o time 0 vai atacar: um na frente, um no fundo
+	a.position = Vector3(-1.0, 0.0, -1.5)
+	b.position = Vector3(1.0, 0.0, -5.0)
+	game.plan = ContactPlan.new(0, 3, Game.Act.ATTACK, game.time + 1.0, Vector3(1.5, 3.05, 1.5), game.teams[0].players[0])
+	ta = PartnerBrain.target_for(a, game)
+	tb = PartnerBrain.target_for(b, game)
+	_check(absf(ta.z) <= PartnerBrain.FRONT_Z + 0.01 and absf(ta.x - 1.5) < 0.01 and absf(tb.z) >= d * 0.5,
+			"defesa: um na frente do atacante, um no fundo (%s, %s)" % [ta, tb])
+	_free_main(main)
+
+
+## Humano roteirizado do 2v2: joga com quem está controlado, solta no tempo e mira como uma
+## pessoa (recepção no levantador, levantamento padrão, ataque no fundo).
+func _script_team_human(game: Game, pressed: bool) -> bool:
+	var me := game.human
+	me.move_input = Vector2.ZERO
+	var act := _phase1_act(game, me)
+	if act == Game.Act.SERVE and game.state == Game.State.SERVE_WAIT:
+		if not pressed:
+			game.human_press(me)
+			_drag_to(game, me, Vector3(0.0, 0.0, -5.0))
+			return true
+		game.human_release(me)
+		return false
+	if act != Game.Act.NONE and game.plan != null and game.plan.player == me:
+		var at := game.plan_view_pos(game.plan)
+		var to := Vector2(at.x - me.position.x, at.z - me.position.z)
+		if to.length() > 0.1:
+			me.move_input = to.normalized() * clampf(to.length() / 0.5, 0.0, 1.0)
+		if not pressed and game.time >= game.plan.t - 0.5:
+			game.human_press(me)
+			var aim := game.default_aim(me)
+			if act == Game.Act.ATTACK or act == Game.Act.FREEBALL:
+				aim = Vector3(1.5, 0.0, -5.0)
+			_drag_to(game, me, aim)
+			return true
+		if pressed and game.time >= game.plan.t - DT * 0.5:
+			game.human_release(me)
+			return false
+		return pressed
+	if pressed:
+		game.human_release(me)
+	return false
+
+
+func _test_sets_2v2() -> void:
+	var main := _make_main_2v2(false)
+	var game: Game = main.get("game")
+	game.bots.clear()
+	var me: Player = main.get("human")
+	var partner: Player = main.get("partner")
+	game.state = Game.State.PLAY
+	game.last_team = 0
+	game.last_player = partner
+	game.touches = 1
+	var at := Vector3(0.6, Tuning.H_SET, 1.6)
+	me.position = Vector3(at.x, 0.0, at.z)
+	partner.position = Vector3(2.0, 0.0, 4.0)
+	game.ball.launch(at, Vector3.ZERO)
+	game.plan = ContactPlan.new(0, 2, Game.Act.SET_BALL, game.time, at, me)
+	var hit_x := PartnerBrain.target_for(partner, game).x
+	var alta: Vector3 = game.set_magnets(0)[0]["pos"]
+	_check(game.set_receiver(0) == partner and absf(alta.x - hit_x) < 0.01 and absf(alta.z - 1.2) < 0.01,
+			"ALTA fica na frente do atacante (%s; atacante em x=%.1f)" % [alta, hit_x])
+	_check(game.default_aim(me).is_equal_approx(alta), "levantamento padrão = ALTA do parceiro")
+	game._execute(me, alta, 0.0, 1.0)
+	_check(game.plan != null and game.plan.player == partner and game.plan.act == Game.Act.ATTACK,
+			"depois do levantamento, o 3º toque é do parceiro")
+	game.tick(DT)
+	_check(game.human == partner, "e o controle passa para ele")
+	_free_main(main)
 
 
 func _test_contact_plan() -> void:
@@ -754,7 +1018,7 @@ func _test_block() -> void:
 			ok = ok and landed_z > 0.0 and game.plan != null and game.plan.player == human \
 					and game.plan.act == Game.Act.RECEIVE and game.plan.n == 1
 		else:
-			ok = ok and absf(target.x) > Tuning.COURT_HALF_W
+			ok = ok and absf(target.x) > game.court.half_w
 		_check(ok, "pico %+.2f s: %s, bloqueio não conta toque (%s, cai em %s)" % [e, expect[e], hit[0], target])
 
 	# cortada mirada longe das mãos passa
@@ -796,7 +1060,7 @@ func _test_dink() -> void:
 	var pred := game.ball.sim.predict()
 	var land: Vector3 = pred["land"]
 	_check(used[0] == 1 and game.last_kind == Game.Act.DINK, "bot mirando a 1,8 m da rede larga")
-	_check(not bool(pred["blocked"]) and land.z > 0.0 and Game.is_inside(land),
+	_check(not bool(pred["blocked"]) and land.z > 0.0 and game.is_inside(land),
 			"largada passa por cima do bloqueio perfeito e cai dentro (%s)" % land)
 	_free_main(main)
 
@@ -1034,53 +1298,77 @@ func _test_save() -> void:
 	DirAccess.remove_absolute(path)
 	var s := SaveData.new(path)
 	s.load_file()
-	_check(s.unlocked_level == 0 and not s.tutorial_done and s.aim_sens == 1.0 and s.vibration,
+	var one := s.rec(MatchConfig.Mode.ONE_V_ONE)
+	_check(one.unlocked_level == 0 and not s.tutorial_done and s.aim_sens == 1.0 and s.vibration,
 			"sem arquivo: valores padrão")
-	s.unlocked_level = 1
+	one.unlocked_level = 1
 	s.tutorial_done = true
-	s.best_rally = 12
-	s.wins = [3, 1, 0]
-	s.losses = [0, 2, 0]
+	one.best_rally = 12
+	one.wins = [3, 1, 0]
+	one.losses = [0, 2, 0]
+	s.rec(MatchConfig.Mode.TWO_V_TWO).wins = [1, 0, 0]
+	s.hint_2v2_done = true
 	s.aim_sens = 1.4
 	s.left_handed = true
 	s.vibration = false
 	_check(s.save_file() == OK and not FileAccess.file_exists(path + ".tmp"), "grava sem deixar arquivo temporário")
 	var r := SaveData.new(path)
 	r.load_file()
-	_check(r.unlocked_level == 1 and r.tutorial_done and r.best_rally == 12 and r.wins == [3, 1, 0]
-			and r.losses == [0, 2, 0] and is_equal_approx(r.aim_sens, 1.4) and r.left_handed and not r.vibration,
-			"ida e volta de todos os campos")
+	var r1 := r.rec(MatchConfig.Mode.ONE_V_ONE)
+	_check(r1.unlocked_level == 1 and r.tutorial_done and r1.best_rally == 12 and r1.wins == [3, 1, 0]
+			and r1.losses == [0, 2, 0] and is_equal_approx(r.aim_sens, 1.4) and r.left_handed and not r.vibration
+			and r.rec(MatchConfig.Mode.TWO_V_TWO).wins == [1, 0, 0] and r.hint_2v2_done,
+			"ida e volta de todos os campos (os dois modos)")
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	f.store_string("isto não é um ConfigFile [[[")
 	f.close()
 	r = SaveData.new(path)
 	r.load_file()
-	_check(r.unlocked_level == 0 and r.wins == [0, 0, 0], "arquivo ilegível: valores padrão")
+	_check(r.rec(0).unlocked_level == 0 and r.rec(0).wins == [0, 0, 0], "arquivo ilegível: valores padrão")
 	var cfg := ConfigFile.new()
 	cfg.set_value("progress", "unlocked_level", 9)
 	cfg.set_value("options", "aim_sens", 50.0)
 	cfg.set_value("records", "wins", ["x", -4])
 	cfg.save(path)
 	r.load_file()
-	_check(r.unlocked_level == 2 and r.aim_sens == SaveData.AIM_SENS_MAX and r.wins == [0, 0, 0],
+	_check(r.rec(0).unlocked_level == 2 and r.aim_sens == SaveData.AIM_SENS_MAX and r.rec(0).wins == [0, 0, 0],
 			"valores fora do limite são cortados")
+	# save da versão 2 (sem modo): tudo vai para o 1v1; o 2v2 começa do zero
+	var v2 := ConfigFile.new()
+	v2.set_value("meta", "version", 2)
+	v2.set_value("progress", "unlocked_level", 2)
+	v2.set_value("records", "best_rally", 17)
+	v2.set_value("records", "wins", [4, 2, 1])
+	v2.set_value("records", "losses", [1, 3, 5])
+	v2.save(path)
+	r = SaveData.new(path)
+	r.load_file()
+	var two := r.rec(MatchConfig.Mode.TWO_V_TWO)
+	_check(r.rec(0).unlocked_level == 2 and r.rec(0).best_rally == 17 and r.rec(0).wins == [4, 2, 1]
+			and r.rec(0).losses == [1, 3, 5] and two.unlocked_level == 0 and two.wins == [0, 0, 0] and not r.hint_2v2_done,
+			"migração da versão 2: o progresso vira o do 1v1")
 	var st := MatchStats.new()
 	st.best_rally = 9
 	var fresh := SaveData.new(path)
 	var win := MatchResult.new(0, 0, [Vector2i(15, 3), Vector2i(15, 4)], st)
 	fresh.record_result(win)
-	_check(fresh.unlocked_level == 1 and win.unlocked == 1 and fresh.wins[0] == 1 and fresh.best_rally == 9,
+	_check(fresh.rec(0).unlocked_level == 1 and win.unlocked == 1 and fresh.rec(0).wins[0] == 1 and fresh.rec(0).best_rally == 9,
 			"vencer o Fácil libera o Médio")
 	var again := MatchResult.new(0, 0, [], st)
 	fresh.record_result(again)
-	_check(fresh.unlocked_level == 1 and again.unlocked == -1, "vencer de novo não libera nada novo")
+	_check(fresh.rec(0).unlocked_level == 1 and again.unlocked == -1, "vencer de novo não libera nada novo")
 	var loss := MatchResult.new(1, 1, [], st)
 	fresh.record_result(loss)
-	_check(fresh.losses[1] == 1 and fresh.unlocked_level == 1, "derrota conta e não libera")
-	fresh.unlocked_level = 2
+	_check(fresh.rec(0).losses[1] == 1 and fresh.rec(0).unlocked_level == 1, "derrota conta e não libera")
+	fresh.rec(0).unlocked_level = 2
 	var top := MatchResult.new(0, 2, [], st)
 	fresh.record_result(top)
-	_check(fresh.unlocked_level == 2 and top.unlocked == -1, "vencer o Difícil mantém o nível 2")
+	_check(fresh.rec(0).unlocked_level == 2 and top.unlocked == -1, "vencer o Difícil mantém o nível 2")
+	var duo := MatchResult.new(0, 0, [], st)
+	duo.mode = MatchConfig.Mode.TWO_V_TWO
+	fresh.record_result(duo)
+	_check(fresh.rec(1).unlocked_level == 1 and fresh.rec(1).wins[0] == 1 and fresh.rec(0).wins[0] == 2,
+			"vitória no 2v2 conta e libera só no 2v2")
 	DirAccess.remove_absolute(path)
 
 
@@ -1236,13 +1524,25 @@ func _test_app_flow() -> void:
 	_check(res is ResultScreen and (res as ResultScreen).result.unlocked == 1, "resultado aparece e avisa o Médio liberado")
 	var r := SaveData.new(path)
 	r.load_file()
-	_check(r.wins[0] == 1 and r.unlocked_level == 1 and r.tutorial_done, "vitória gravada no arquivo")
+	_check(r.rec(0).wins[0] == 1 and r.rec(0).unlocked_level == 1 and r.tutorial_done, "vitória gravada no arquivo")
 	app.call("start_match", 1)
 	m = app.get("match_node")
 	m.pause_game()
 	_check(paused and m.pause_menu.visible, "partida do App pausa")
 	m.pause_menu.quit_pressed.emit()
 	_check(app.get("screen") is TitleScreen and not paused, "Sair para o menu volta ao título e despausa")
+	# 2v2: alternador na escolha, progresso próprio, dica de primeira partida
+	app.call("show_level_select")
+	var sel: LevelSelectScreen = app.get("screen")
+	sel.set_mode(MatchConfig.Mode.TWO_V_TWO)
+	btns = _buttons(sel)
+	_check(btns.size() == 4 and not btns[0].disabled and btns[1].disabled, "2v2: só o Fácil liberado (progresso próprio)")
+	btns[0].pressed.emit()
+	m = app.get("match_node")
+	_check(m != null and m.game.players.size() == 4 and not m.game.rules.same_player_twice and save.hint_2v2_done,
+			"2v2 abre com 4 jogadores, regra de dupla e a dica")
+	m.pause_game()
+	m.pause_menu.quit_pressed.emit()
 	root.remove_child(app)
 	app.free()
 	DirAccess.remove_absolute(path)
@@ -1315,6 +1615,114 @@ func _test_match_duration() -> void:
 		avg += mm / minutes.size()
 	# RNF-1.01 (DP-05): melhor de 3 sets de 15 dá ~6–7 min em 2 sets e ~9–11 min em 3 sets
 	_check(avg >= 6.0 and avg <= 9.0, "partida casual x Fácil dura 6–9 min em média (%.1f min)" % avg)
+
+
+## Um quadro do humano casual (reação, erro de timing, mira em zona sorteada), jogando com quem
+## está controlado. `st` guarda o estado entre quadros.
+func _casual_step(game: Game, st: Dictionary, rng: RandomNumberGenerator, zones: Array) -> void:
+	var me := game.human
+	me.move_input = Vector2.ZERO
+	var act := _phase1_act(game, me)
+	if act == Game.Act.SERVE and game.state == Game.State.SERVE_WAIT:
+		st["serve_t"] = float(st["serve_t"]) + DT
+		if not st["pressed"] and float(st["serve_t"]) > 0.8:
+			game.human_press(me)
+			_drag_to(game, me, zones[rng.randi() % zones.size()]["pos"])
+			st["pressed"] = true
+		elif st["pressed"] and float(st["serve_t"]) > 1.1:
+			game.human_release(me)
+			st["pressed"] = false
+			st["serve_t"] = 0.0
+	elif act != Game.Act.NONE and game.plan != null and game.plan.player == me:
+		var plan := game.plan
+		if game.plan_id != int(st["seen"]):
+			st["seen"] = game.plan_id
+			st["react"] = game.time + (float(st["reaction"]) if plan.n == 1 else 0.05)
+			st["release"] = plan.t + rng.randfn(0.0, float(st["sigma"]))
+		if game.time >= float(st["react"]):
+			var at := game.plan_view_pos(plan)
+			var to := Vector2(at.x - me.position.x, at.z - me.position.z)
+			if to.length() > 0.1:
+				me.move_input = to.normalized() * clampf(to.length() / 0.5, 0.0, 1.0)
+			if not st["pressed"] and game.time >= float(st["release"]) - 0.5:
+				game.human_press(me)
+				var aim := game.default_aim(me)
+				if plan.act == Game.Act.ATTACK or plan.act == Game.Act.FREEBALL:
+					aim = zones[rng.randi() % zones.size()]["pos"]
+				_drag_to(game, me, aim)
+				st["pressed"] = true
+			elif st["pressed"] and game.time >= float(st["release"]):
+				game.human_release(me)
+				st["pressed"] = false
+	elif st["pressed"]:
+		game.human_release(me)
+		st["pressed"] = false
+
+
+func _new_casual(reaction: float, sigma: float) -> Dictionary:
+	return {"seen": -1, "react": 0.0, "release": 0.0, "pressed": false, "serve_t": 0.0,
+			"reaction": reaction, "sigma": sigma}
+
+
+func _test_match_duration_2v2() -> void:
+	var minutes: Array[float] = []
+	var won := 0
+	for seed in [3, 5, 7, 9, 11, 13, 17, 19]:
+		var cfg := MatchConfig.new()
+		cfg.mode = MatchConfig.Mode.TWO_V_TWO
+		cfg.endless = false
+		var main := _make_main_cfg(cfg)
+		var game: Game = main.get("game")
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed
+		game.rng.seed = seed
+		for b in game.bots:
+			b.rng.seed = seed + b.p.get_index()
+		var zones := game.aim_magnets(game.human, Game.Act.SERVE)
+		var st := _new_casual(0.4, 0.09)
+		var t0 := game.time
+		while game.state != Game.State.MATCH_OVER and game.time - t0 < 3600.0:
+			_casual_step(game, st, rng, zones)
+			game.tick(DT)
+		var mins := (game.time - t0) / 60.0
+		minutes.append(mins)
+		if game.rules.winner == 0:
+			won += 1
+		print("  semente %d: %s  %s  %.1f min" % [seed, "venceu" if game.rules.winner == 0 else "perdeu",
+				game.rules.history, mins])
+		_free_main(main)
+	var avg := 0.0
+	for mm in minutes:
+		avg += mm / minutes.size()
+	print("  vence %d de 8" % won)
+	_check(avg >= 6.0 and avg <= 9.0, "2v2: partida casual x Fácil dura 6–9 min em média (%.1f min)" % avg)
+
+	# RNF-3.03: rally médio do humano (bom) contra o Médio no 2v2 >= no 1v1
+	var avgs := []
+	for two in [false, true]:
+		var c := MatchConfig.new()
+		c.mode = MatchConfig.Mode.TWO_V_TWO if two else MatchConfig.Mode.ONE_V_ONE
+		c.bot_level = 1
+		var main := _make_main_cfg(c)
+		var game: Game = main.get("game")
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 23
+		game.rng.seed = 23
+		for b in game.bots:
+			b.rng.seed = 23 + b.p.get_index()
+		var zones := game.aim_magnets(game.human, Game.Act.SERVE)
+		var st := _new_casual(0.25, 0.05)
+		var tot := [0, 0]
+		game.point_scored.connect(func(_t: int, _w: String) -> void:
+			tot[0] += game.rally_touches
+			tot[1] += 1)
+		for _i in int(600.0 / DT):
+			_casual_step(game, st, rng, zones)
+			game.tick(DT)
+		avgs.append(float(tot[0]) / maxf(tot[1], 1.0))
+		_free_main(main)
+	print("  rally médio x Médio: 1v1 %.1f toques  ·  2v2 %.1f toques" % avgs)
+	_check(avgs[1] >= avgs[0], "2v2: rally médio x Médio >= 1v1")
 
 
 func _drag_to(game: Game, human: Player, target: Vector3) -> void:

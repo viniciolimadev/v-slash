@@ -20,7 +20,8 @@ func _build() -> void:
 	var sets: PackedStringArray = []
 	for s in result.sets:
 		sets.append("%d × %d" % [s.x, s.y])
-	add_line("Bot %s   ·   %s" % [Tuning.BOT_NAMES[result.level], "   ".join(sets)], 30, Color.WHITE)
+	add_line("%s   ·   Bot %s   ·   %s" % [SaveData.MODE_KEYS[result.mode], Tuning.BOT_NAMES[result.level],
+			"   ".join(sets)], 30, Color.WHITE)
 	var st := result.stats
 	var secs := int(st.duration())
 	add_line("Duração %d:%02d   ·   Maior rally %d   ·   Perfeitos %d%%" % [

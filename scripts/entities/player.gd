@@ -17,17 +17,22 @@ var can_dive := true                # o bot no Fácil não faz peixinho
 var diving_t := 0.0                 # s que ainda faltam no chão depois do peixinho
 var stamina := 1.0                  # 0..1; só vale com Game.stamina_on (Tuning.STAMINA_ENABLED)
 var stamina_on := false
+var court := CourtSpec.default_spec()
 
 var _jump_t := -1.0
 var _jump_target := Vector3.ZERO
 var _body: Node3D
 var _arms: Node3D
 var _swing_tw: Tween
+var _color := Color.WHITE
+var _ring_full: MeshInstance3D = null
+var _ring_thin: MeshInstance3D = null
 
 
 func setup(p_team: int, p_human: bool, color: Color) -> void:
 	team = p_team
 	is_human = p_human
+	_color = color
 	_body = Node3D.new()
 	add_child(_body)
 	_body.rotation.y = 0.0 if team == 0 else PI
@@ -46,11 +51,27 @@ func setup(p_team: int, p_human: bool, color: Color) -> void:
 		arm.size = Vector3(0.11, 0.64, 0.11)
 		_add_mesh(_arms, arm, Vector3(sx, -0.32, 0.0), color.lightened(0.3))
 	if is_human:
+		set_ring(2, false)
+
+
+## Anel no pé: 0 = nenhum, 1 = fino (seu parceiro no 2v2), 2 = cheio (quem você controla).
+## pulse = pulso rápido para mostrar que o controle chegou neste jogador.
+func set_ring(kind: int, pulse: bool = true) -> void:
+	if _ring_full == null:
 		# anel no pé para você se achar rápido
-		var ring := TorusMesh.new()
-		ring.inner_radius = 0.42
-		ring.outer_radius = 0.5
-		_add_mesh(self, ring, Vector3(0.0, 0.03, 0.0), color.lightened(0.35))
+		var full := TorusMesh.new()
+		full.inner_radius = 0.42
+		full.outer_radius = 0.5
+		_ring_full = _add_mesh(self, full, Vector3(0.0, 0.03, 0.0), _color.lightened(0.35))
+		var thin := TorusMesh.new()
+		thin.inner_radius = 0.46
+		thin.outer_radius = 0.49
+		_ring_thin = _add_mesh(self, thin, Vector3(0.0, 0.03, 0.0), _color.lightened(0.2))
+	_ring_full.visible = kind == 2
+	_ring_thin.visible = kind == 1
+	if kind == 2 and pulse:
+		_ring_full.scale = Vector3(1.6, 1.0, 1.6)
+		create_tween().tween_property(_ring_full, "scale", Vector3.ONE, 0.15)
 
 
 func reset_state() -> void:
@@ -197,10 +218,10 @@ func swing(kind: int) -> void:
 
 func _clamp_to_court() -> void:
 	var s := 1.0 if team == 0 else -1.0
-	var w := Tuning.COURT_HALF_W
-	var d := Tuning.COURT_DEPTH
+	var w := court.half_w
+	var d := court.depth
 	if serving:
-		position.z = s * (d + 0.9)
+		position.z = s * (d + court.serve_back)
 		position.x = clampf(position.x, -w + 0.3, w - 0.3)
 		return
 	position.x = clampf(position.x, -w - 2.5, w + 2.5)

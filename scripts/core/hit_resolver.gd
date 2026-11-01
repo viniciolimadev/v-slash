@@ -17,6 +17,7 @@ class Shot:
 
 
 var rng: RandomNumberGenerator      # o mesmo do Game (testes com semente continuam iguais)
+var court := CourtSpec.default_spec()   # a do Game (Game.setup)
 
 
 func _init(p_rng: RandomNumberGenerator) -> void:
@@ -36,7 +37,7 @@ func resolve(game: Game, p: Player, act: int, aim: Vector3, q: float, cap: float
 	target = scatter(target, kind, q)
 	target = Game._keep_side(target, -s if over else s, 0.4)
 	if p.is_human and q >= Tuning.ASSIST_KEEP_IN_Q:
-		target = Game.keep_inside(target)
+		target = game.keep_inside(target)
 	var v := Vector3.ZERO
 	var grav := Tuning.GRAVITY
 	if kind == Game.Act.RECEIVE:
@@ -93,7 +94,7 @@ func serve(game: Game, p: Player, serve_kind: int, from: Vector3, aim: Vector3, 
 	var risky := serve_kind == ServeType.Kind.JUMP
 	# assistência "toque BOM fica dentro": não vale para a viagem (é o risco do saque forte)
 	if p.is_human and q >= Tuning.ASSIST_KEEP_IN_Q and not risky:
-		target = Game.keep_inside(target)
+		target = game.keep_inside(target)
 	var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
 	var t := float(Tuning.SERVE_TIME[serve_kind])
 	var grav := float(Tuning.SERVE_GRAV[serve_kind])
@@ -125,7 +126,7 @@ func _cancel_drift(shot: Shot) -> void:
 		shot.vel = Vector3(base.x - drift / t_land, base.y, base.z)
 		var x_net := shot.from.x + shot.vel.x * t_net \
 				+ BallSim.wobble_offset(shot.wobble_amp, Tuning.FLOAT_FREQ, shot.wobble_phase, t_net)
-		if absf(x_net) <= Tuning.COURT_HALF_W - 0.2 or flip == 1:
+		if absf(x_net) <= court.half_w - 0.2 or flip == 1:
 			return
 		shot.wobble_phase += PI
 
@@ -135,7 +136,7 @@ func _cancel_drift(shot: Shot) -> void:
 ## ruim = desvia para fora, pela lateral mais perto.
 func block_exit(from: Vector3, bk: Block, q: float) -> Shot:
 	var s := bk.side
-	var w := Tuning.COURT_HALF_W - 0.5
+	var w := court.half_w - 0.5
 	var shot := Shot.new()
 	shot.from = from
 	shot.grav = Tuning.GRAVITY
@@ -149,7 +150,7 @@ func block_exit(from: Vector3, bk: Block, q: float) -> Shot:
 		shot.vel = BallSim.clear_net_velocity(from, shot.target, Tuning.BLOCK_T_SOFT)
 	else:
 		var out := 1.0 if from.x >= 0.0 else -1.0
-		shot.target = Vector3(out * (Tuning.COURT_HALF_W + 1.5), Tuning.BALL_RADIUS, s * rng.randf_range(1.0, 4.0))
+		shot.target = Vector3(out * (court.half_w + 1.5), Tuning.BALL_RADIUS, s * rng.randf_range(1.0, 4.0))
 		shot.vel = BallSim.clear_net_velocity(from, shot.target, Tuning.BLOCK_T_DEFLECT)
 	return shot
 

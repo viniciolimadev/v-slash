@@ -13,6 +13,8 @@ signal served(player: Player, serve_kind: int, grade: String)
 ## DINK e DIVE não são planejados por _make_plan: são variações decididas na hora
 ## (DINK pela mira; DIVE pela distância até a bola).
 signal action_used(player: Player, act: int)
+## 2v2: o controle passou para outro jogador do seu time.
+signal control_changed(player: Player)
 
 ## SERVE_TOSS: bola lançada no saque flutuante/viagem, esperando o toque (Fase 2).
 enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER, SERVE_TOSS }
@@ -24,12 +26,15 @@ var state: int = State.SERVE_WAIT
 var time := 0.0
 var ball: Ball
 var players: Array[Player] = []
+var teams: Array[Team] = []
 var bots: Array[BotBrain] = []
+## Jogador que você controla agora. No 2v2 troca sozinho para quem vai tocar (_update_control).
 var human: Player = null
 var rules := MatchRules.new(0)      # infinito por padrão; a partida de verdade troca por regras com sets
 var server_team := 0
 var server: Player = null
 var last_team := -1                 # time que tocou por último
+var last_player: Player = null      # quem tocou por último (regra dos toques seguidos no 2v2)
 var touches := 0                    # toques seguidos do last_team
 var rally_touches := 0
 var best_rally := 0
@@ -47,6 +52,7 @@ var land_display := Vector3.ZERO    # ponto de queda "sem efeito" (flutuante); v
 var land_t := 0.0                   # relógio do pouso previsto
 var bot_level := 0                  # começa no Fácil: a meta da Fase 0 é sentir o gesto
 var rng := RandomNumberGenerator.new()
+var court := CourtSpec.default_spec()   # defina antes de setup() (main.gd, pelo modo)
 var resolver := HitResolver.new(rng)
 
 var human_aiming := false
@@ -66,7 +72,12 @@ func setup(p_ball: Ball, p_players: Array[Player], p_bots: Array[BotBrain]) -> v
 	ball = p_ball
 	players = p_players
 	bots = p_bots
+	ball.court = court
+	resolver.court = court
+	teams = [Team.new(0), Team.new(1)]
 	for p in players:
+		p.court = court
+		teams[p.team].players.append(p)
 		if p.is_human:
 			human = p
 			# começa no fundo da quadra adversária
@@ -86,6 +97,9 @@ func set_stamina(on: bool) -> void:
 
 func reset_match() -> void:
 	rules = rules.fresh()
+	for t in teams:
+		t.next_server = 0
+	server = null
 	best_rally = 0
 	_set_break = false
 	_reset_for_serve(rules.first_server(0))
@@ -106,6 +120,7 @@ func level_name() -> String:
 
 func tick(dt: float) -> void:
 	time += dt
+	_update_control()
 	for b in bots:
 		b.tick(dt)
 	for p in players:
@@ -128,6 +143,39 @@ func tick(dt: float) -> void:
 	_update_assists()
 
 
+# ---------------------------------------------------------------- controle (2v2)
+
+## Você controla quem vai tocar: o sacador do seu time, o jogador do plano, o do bloqueio;
+## senão, mantém (com a bola do outro lado, fica quem tocou por último).
+## Nunca troca com o dedo no botão: a troca espera você soltar.
+func _update_control() -> void:
+	if human == null or human_aiming or teams.is_empty() or teams[human.team].players.size() < 2:
+		return
+	var t := human.team
+	var want := human
+	if state == State.SERVE_WAIT or state == State.SERVE_TOSS:
+		if server_team == t and server != null:
+			want = server
+	elif plan != null and plan.team == t and plan.player != null:
+		want = plan.player
+	elif block_plan != null and block_plan.team == t:
+		want = block_plan.player
+	if want != human:
+		set_control(want)
+
+
+func set_control(p: Player) -> void:
+	var old := human
+	old.is_human = false
+	old.holding = false
+	old.move_input = Vector2.ZERO
+	p.is_human = true
+	p.speed = Tuning.MOVE_SPEED
+	p.can_dive = true
+	human = p
+	control_changed.emit(p)
+
+
 # ---------------------------------------------------------------- consultas
 
 static func side_of_team(team: int) -> float:
@@ -138,9 +186,15 @@ static func side_of_point(v: Vector3) -> float:
 	return 1.0 if v.z > 0.0 else -1.0
 
 
-static func is_inside(v: Vector3) -> bool:
-	var tol := Tuning.LINE_TOLERANCE
-	return absf(v.x) <= Tuning.COURT_HALF_W + tol and absf(v.z) <= Tuning.COURT_DEPTH + tol
+func is_inside(v: Vector3) -> bool:
+	return court.is_inside(v)
+
+
+## Ponto escrito para o time 0 na quadra do 1v1 (Tuning), na quadra deste modo e do lado do time.
+func spot(team: int, v: Vector2) -> Vector3:
+	var k := court.scaled(v.x, v.y)
+	var s := side_of_team(team)
+	return Vector3(k.x * s, 0.0, k.y * s)
 
 
 ## Ação que o botão faria agora para este jogador.
@@ -243,6 +297,17 @@ func opponent_of(team: int) -> Player:
 ## Alvos do levantamento com ímã. ALTA = bola alta na sua frente (padrão).
 func set_magnets(team: int) -> Array:
 	var s := side_of_team(team)
+	var hitter := set_receiver(team)
+	if hitter != null:
+		# 2v2: os alvos são relativos a quem vai atacar (o parceiro de quem levanta)
+		var x := clampf(PartnerBrain.target_for(hitter, self).x, -court.half_w + 0.8, court.half_w - 0.8)
+		var edge := signf(x) if absf(x) > 0.1 else -s
+		return [
+			{"name": "ALTA", "pos": Vector3(x, 0.0, s * 1.2), "quick": false},
+			{"name": "PONTA", "pos": Vector3(edge * (court.half_w - 0.8), 0.0, s * 1.0), "quick": false},
+			{"name": "MEIO", "pos": Vector3(0.0, 0.0, s * 1.0), "quick": true},
+			{"name": "FUNDO", "pos": Vector3(x, 0.0, s * 3.0), "quick": false},
+		]
 	return [
 		{"name": "ALTA", "pos": _high_set_point(team), "quick": false},
 		{"name": "PONTA", "pos": Vector3(-2.6 * s, 0.0, 1.0 * s), "quick": false},
@@ -261,12 +326,13 @@ func aim_magnets(p: Player, act: int) -> Array:
 		return []
 	if act == Act.RECEIVE:
 		return [{"name": "LEVANTADOR", "quick": false,
-				"pos": Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s)}]
+				"pos": spot(p.team, Tuning.SETTER_SPOT)}]
 	var out := []
 	for z in Tuning.ATTACK_ZONES:
 		var v: Vector2 = z[1]
 		# câmera atrás do time 0: direita da tela = +x; o time 1 vê espelhado
-		out.append({"name": z[0], "quick": false, "pos": Vector3(v.x * s, 0.0, -v.y * s)})
+		var k := court.scaled(v.x, v.y)
+		out.append({"name": z[0], "quick": false, "pos": Vector3(k.x * s, 0.0, -k.y * s)})
 	return out
 
 
@@ -317,17 +383,17 @@ func default_aim(p: Player) -> Vector3:
 	if act == Act.NONE:
 		return p.position
 	if act == Act.RECEIVE:
-		return Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s)
+		return spot(p.team, Tuning.SETTER_SPOT)
 	if act == Act.SET_BALL:
 		return _high_set_point(p.team)
-	return Vector3(0.0, 0.0, -s * Tuning.COURT_DEPTH * 0.6)
+	return Vector3(0.0, 0.0, -s * court.depth * 0.6)
 
 
 func clamp_aim(p: Player, a: Vector3, act: int = -1) -> Vector3:
 	var s := side_of_team(p.team)
 	# assistência: a mira nunca sai da quadra
-	var w := Tuning.COURT_HALF_W - Tuning.AIM_MARGIN
-	var d := Tuning.COURT_DEPTH - Tuning.AIM_MARGIN
+	var w := court.half_w - Tuning.AIM_MARGIN
+	var d := court.depth - Tuning.AIM_MARGIN
 	var out := Vector3(clampf(a.x, -w, w), 0.0, clampf(a.z, -d, d))
 	if act < 0:
 		act = aim_act(p)
@@ -361,6 +427,10 @@ func human_release(p: Player) -> void:
 	if not human_aiming:
 		return
 	human_aiming = false
+	# 2v2: a troca que esperou o dedo acontece agora, e o toque vai para quem tem a bola
+	_update_control()
+	if human != null and human.team == p.team:
+		p = human
 	attempt_hit(p, clamp_aim(p, human_aim))
 
 
@@ -472,6 +542,7 @@ func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 	else:
 		touches += 1
 	last_team = p.team
+	last_player = p
 	last_kind = shot.kind
 	rally_touches += 1
 	p.swing_cd = 0.25
@@ -514,6 +585,7 @@ func _serve(p: Player, aim: Vector3, q: float, grade: String = "SAQUE") -> void:
 	p.serving = false
 	state = State.PLAY
 	last_team = p.team
+	last_player = p
 	last_kind = Act.SERVE
 	touches = 3          # quem sacou não pode tocar de novo antes da bola passar
 	rally_touches = 1
@@ -624,9 +696,11 @@ func _on_block(e: Dictionary) -> void:
 			grade = "CEDO" if err < 0.0 else "TARDE"
 	var shot := resolver.block_exit(from, bk, q)
 	_launch(shot)
+	# 1v1: bloqueio não conta (B-4); 2v2: conta como 1º toque (praia, B3-2)
+	touches = 1 if rules.block_counts else 0
 	last_team = bk.team
+	last_player = bk.player
 	last_kind = Act.BLOCK
-	touches = 0
 	rally_touches += 1
 	touch_made.emit(bk.player, grade, q)
 	_make_plan()
@@ -639,10 +713,8 @@ func _whiff(p: Player, why: String) -> void:
 
 
 ## Assistência: traz o alvo para dentro da quadra (com folga das linhas).
-static func keep_inside(v: Vector3, margin: float = 0.3) -> Vector3:
-	var w := Tuning.COURT_HALF_W - margin
-	var d := Tuning.COURT_DEPTH - margin
-	return Vector3(clampf(v.x, -w, w), v.y, clampf(v.z, -d, d))
+func keep_inside(v: Vector3, margin: float = 0.3) -> Vector3:
+	return court.keep_inside(v, margin)
 
 
 ## Garante o alvo do lado `s` (+1/-1), a pelo menos min_dist da rede.
@@ -673,7 +745,7 @@ func _make_plan() -> void:
 	var recv_side := side_of_point(land_point)
 	var recv_team := 0 if recv_side > 0.0 else 1
 	var n := 1 if recv_team != last_team else touches + 1
-	if n > Tuning.MAX_TOUCHES:
+	if n > rules.max_touches:
 		return              # toque além do limite não existe: a bola vai cair
 	var options: Array = []
 	if n == 1:
@@ -693,7 +765,7 @@ func _make_plan() -> void:
 			if not fake.is_empty():
 				shown = fake["pos"]
 		plan = ContactPlan.new(recv_team, n, int(opt[0]), time + float(hit["t"]), at,
-				_closest_player(recv_team, shown))
+				_choose_player(recv_team, shown, n))
 		plan.display_pos = shown
 		return
 
@@ -703,22 +775,41 @@ static func _last_time(pred: Dictionary) -> float:
 	return times[times.size() - 1]
 
 
-func _closest_player(team: int, at: Vector3) -> Player:
+## Quem do time toca a bola em `at` como n-ésimo toque do lado.
+## 1º toque: quem chega antes (empate: o mais de trás). Depois: no 2v2, nunca quem tocou por último
+## (exceto depois de bloqueio, que conta como toque mas libera o bloqueador, B3-2).
+func _choose_player(team: int, at: Vector3, n: int) -> Player:
+	var squad := teams[team].players
+	if squad.size() == 1:
+		return squad[0]
+	var banned: Player = null
+	if n > 1 and not rules.same_player_twice and last_kind != Act.BLOCK:
+		banned = last_player
 	var best: Player = null
-	var best_d := INF
-	for p in players:
-		if p.team != team:
+	var best_t := INF
+	for p in squad:
+		if p == banned:
 			continue
-		var d := Vector2(at.x - p.position.x, at.z - p.position.z).length()
-		if d < best_d:
-			best_d = d
+		var t := Vector2(at.x - p.position.x, at.z - p.position.z).length() / maxf(p.speed, 0.1)
+		if best == null or t < best_t - 1e-3 or (absf(t - best_t) <= 1e-3 and absf(p.position.z) > absf(best.position.z)):
 			best = p
+			best_t = t
 	return best
+
+
+## 2v2: quem vai receber o levantamento do time (o parceiro de quem levanta); null no 1v1.
+func set_receiver(team: int) -> Player:
+	if teams.size() <= team or teams[team].players.size() < 2 or plan == null or plan.team != team \
+			or plan.act != Act.SET_BALL:
+		return null
+	return teams[team].other(plan.player)
 
 
 func _high_set_point(team: int) -> Vector3:
 	var s := side_of_team(team)
-	var base := Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s)
+	if set_receiver(team) != null:
+		return set_magnets(team)[0]["pos"]
+	var base := spot(team, Tuning.SETTER_SPOT)
 	if plan != null and plan.team == team:
 		base = plan.pos
 	return Vector3(clampf(base.x, -2.5, 2.5), 0.0, s * clampf(absf(base.z) - 0.5, 1.2, 4.0))
@@ -828,6 +919,7 @@ func _reset_for_serve(team: int) -> void:
 	rally_touches = 0
 	touches = 0
 	last_team = -1
+	last_player = null
 	last_kind = Act.NONE
 	blocks.clear()
 	block_plan = null
@@ -835,17 +927,22 @@ func _reset_for_serve(team: int) -> void:
 	plan_id += 1
 	_pending.clear()
 	human_aiming = false
+	# o time recuperou o saque: saca o outro da dupla; pontuou sacando: o sacador repete
+	if server == null or team != server_team:
+		server = teams[team].server_on_sideout()
 	server_team = team
-	server = null
-	for p in players:
-		if p.team == team and server == null:
-			server = p
 	for p in players:
 		var s := side_of_team(p.team)
 		p.reset_state()
 		p.serving = p == server
 		if p == server:
-			p.position = Vector3(1.2 * s, 0.0, s * (Tuning.COURT_DEPTH + 0.9))
-		else:
+			p.position = Vector3(1.2 * s, 0.0, s * (court.depth + court.serve_back))
+		elif teams[p.team].players.size() == 1:
 			p.position = Vector3(0.0, 0.0, s * 4.2)
+		elif p.team == team:
+			p.position = Vector3(-1.5 * s, 0.0, s * court.depth * 0.45)      # parceiro do sacador
+		else:
+			# recepção lado a lado (o primeiro da lista à esquerda de quem saca)
+			var slot := -1.0 if teams[p.team].players[0] == p else 1.0
+			p.position = Vector3(slot * 2.0 * s, 0.0, s * court.depth * 0.6)
 	ball.hold(server)

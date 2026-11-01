@@ -4,7 +4,7 @@ Complementa o [SDD geral](SDD.md) (seção 9.3) e o [ROADMAP](ROADMAP.md). Desig
 
 | | |
 |---|---|
-| Versão | 1.0 — 2026-10-31 |
+| Versão | 1.1 — 2026-10-31 (implementada; ver seção 10) |
 | Base | Fase 2 concluída (versão 0.3.0) |
 | Versão ao fim da fase | 0.4.0 |
 | Decisões que valem aqui | DP-01 (1v1 continua com 3 toques do mesmo jogador), DP-04 (sem multiplayer: o parceiro é IA) |
@@ -288,3 +288,22 @@ Simulações novas: bot × bot 2v2 (Médio × Médio) e humano roteirizado com t
 | B3-3 | Controle automático em quem vai tocar | controle fixo num jogador (parceiro IA toca as bolas dele) — poderia virar opção |
 | B3-4 | 2v2 liberado desde o início, com progressão própria de níveis | liberar só depois de vencer o 1v1 Médio |
 | B3-5 | Sem troca de lado entre sets | trocar a cada 7 pontos como na praia |
+| B3-6 | `ATTACK_ZONES` e `SETTER_SPOT` continuam em metros da quadra do 1v1 e `CourtSpec.scaled()` multiplica pela razão entre as quadras (no 1v1 a razão é exatamente 1: mesmos números de antes, sem erro de arredondamento) | frações da quadra, como o esboço |
+| B3-7 | Comprimento da rede = `half_w + NET_OVERHANG` (0,7 m), para valer nos dois modos | `net_half_len` fixo por modo |
+| B3-8 | Com o dedo no botão o controle não troca; **ao soltar**, a troca pendente acontece e o toque vai para quem tem o plano (senão o gesto seria um "SEM BOLA" garantido). O parceiro do humano (`BotBrain.partner_mode`) só se posiciona, nunca toca | parceiro IA toca a bola dele enquanto você segura |
+| B3-9 | Na defesa, o jogador da frente espera a 2,0 m da rede (fora da `BLOCK_ZONE`) e só sobe para bloquear quando o bot decide bloquear (`BOT_BLOCK_CHANCE`); senão o Fácil bloquearia sempre | defensor da frente sempre na rede |
+| B3-10 | No 2v2 os bots correm `BOT_SPEED_2V2` (0,9) da velocidade do nível: com dois cobrindo a quadra, a partida casual × Fácil ficava no limite de 9 min | mesma velocidade do 1v1 |
+
+---
+
+## 10. Resultado (fim da fase)
+
+| Medida (CI, sementes fixas) | Meta | Resultado |
+|---|---|---|
+| 1v1 intacto (RNF-3.01) | mesmos números | duração casual × Fácil e Médio × Difícil iguais aos da Fase 2 |
+| Enquadramento 2v2 (RNF-3.02) | quadra + sacadores em 16:9 e 20:9 | ok (fundo dele em y=226, seu sacador em y=577 de 720) |
+| Rally humano bom × Médio (RNF-3.03) | 2v2 ≥ 1v1 | 10,3 × 6,5 toques |
+| Duração casual × Fácil 2v2 (RNF-3.04) | 6–9 min | 8,3 min (vence 4 de 8) |
+| Toques seguidos do mesmo jogador | 0 | 0 em 20 min de bot × bot (92 pontos) |
+
+**Em aberto:** RNF-3.05 (fps no Android com 4 jogadores) e o critério 4 (troca de controle entendida no celular) dependem do teste no aparelho.
