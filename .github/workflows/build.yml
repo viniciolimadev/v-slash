@@ -264,7 +264,8 @@ jobs:
 
       - name: Play Console (trilha interna)
         if: env.HAS_PLAY == 'true'
-        uses: r0adkll/upload-google-play@v1
+        # fixado por SHA: a ação recebe a credencial da Play (atualizações chegam pelo Dependabot)
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.viniciolimadev.voleimobile
@@ -278,7 +279,8 @@ jobs:
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
         run: |
-          curl -sSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          # versão fixa (não LATEST): o butler recebe a chave da API do itch.io
+          curl -sSLf -o butler.zip https://broth.itch.zone/butler/linux-amd64/15.32.0/archive/default
           unzip -q butler.zip -d butler && chmod +x butler/butler
           ./butler/butler push export/web "${{ vars.ITCH_TARGET || 'viniciolimadev/volei-mobile' }}:html5" \
             --userversion "$VERSION_NAME"
