@@ -87,7 +87,12 @@ func _build_world() -> void:
 	cam.near = 0.5
 	cam.far = 200.0
 	add_child(cam)
-	cam.look_at_from_position(Vector3(0.0, 14.0, 21.0), Vector3(0.0, 0.0, 0.5), Vector3.UP)
+	var eye := Vector3(0.0, 14.0, 21.0)
+	if config.mode == MatchConfig.Mode.TWO_V_TWO:
+		# quadra 8 × 8: mais alto e mais aberto para caber a quadra inteira e os sacadores
+		cam.fov = 40.0
+		eye = Vector3(0.0, 16.0, 24.0)
+	cam.look_at_from_position(eye, Vector3(0.0, 0.0, 0.5), Vector3.UP)
 	cam.make_current()
 
 

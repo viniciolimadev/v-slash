@@ -150,14 +150,20 @@ func _test_physics() -> void:
 
 
 func _test_camera() -> void:
-	var main := _make_main(true)
+	_check_framing(_make_main(true), "1v1")
+	_check_framing(_make_main_2v2(true), "2v2")
+
+
+func _check_framing(main: Node, mode_name: String) -> void:
 	var cam: Camera3D = main.get("cam")
+	var court := (main.get("game") as Game).court
 	for aspect: float in [16.0 / 9.0, 20.0 / 9.0]:
 		var proj := Projection.create_perspective(cam.fov, aspect, cam.near, cam.far)
 		var view := cam.global_transform.affine_inverse()
 		var names := ["fundo dele", "rede", "sua linha de fundo", "seu sacador"]
-		var pts := [Vector3(0, 0, -7), Vector3(0, 2.43, 0), Vector3(3.5, 0, 7), Vector3(0, 0, 7.9)]
-		var line := "  aspecto %.2f:" % aspect
+		var pts := [Vector3(0, 0, -court.depth), Vector3(0, 2.43, 0), Vector3(court.half_w, 0, court.depth),
+				Vector3(0, 0, court.depth + court.serve_back)]
+		var line := "  %s aspecto %.2f:" % [mode_name, aspect]
 		var all_in := true
 		for i in pts.size():
 			var w: Vector3 = view * Vector3(pts[i])
@@ -168,7 +174,7 @@ func _test_camera() -> void:
 			if absf(ndc.x) > 1.0 or absf(ndc.y) > 1.0:
 				all_in = false
 		print(line)
-		_check(all_in, "quadra inteira + sacador visíveis no aspecto %.2f" % aspect)
+		_check(all_in, "%s: quadra inteira + sacador visíveis no aspecto %.2f" % [mode_name, aspect])
 	_free_main(main)
 
 
