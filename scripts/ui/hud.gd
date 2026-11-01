@@ -125,13 +125,17 @@ func set_level_name(level_text: String) -> void:
 	_level_btn.text = "Bot: " + level_text
 
 
-## Feedback rápido do toque (PERFEITO!, BOM, CEDO, LONGE...).
-func popup(text: String, color: Color) -> void:
+## Feedback rápido do toque (PERFEITO!, BOM, CEDO, LONGE...). punch = entra grande (PERFEITO).
+func popup(text: String, color: Color, punch := false) -> void:
 	_popup.text = text
 	_popup.modulate = color
 	if _popup_tw != null and _popup_tw.is_valid():
 		_popup_tw.kill()
+	_popup.pivot_offset = _popup.size * 0.5
+	_popup.scale = Vector2.ONE * (1.6 if punch else 1.0)
 	_popup_tw = create_tween()
+	if punch:
+		_popup_tw.tween_property(_popup, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_popup_tw.tween_interval(0.45)
 	_popup_tw.tween_property(_popup, "modulate:a", 0.0, 0.35)
 

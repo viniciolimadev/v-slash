@@ -27,6 +27,7 @@ var hud: Hud
 var markers: Markers
 var cam: Camera3D
 var court_view: CourtView = null    # praia (Fase 4); null com --no-views ou USE_MODEL_VIEWS = false
+var fx: Fx = null                   # efeitos (rastro, areia, brilho, tremor); null com --no-views
 var stats := MatchStats.new()
 var pause_menu: PauseMenu
 var tutorial: TutorialDirector = null
@@ -181,6 +182,9 @@ func _attach_views(ball: Ball) -> void:
 	var bv := BallView.new()
 	ball.add_child(bv)
 	bv.bind(ball)
+	fx = Fx.new()
+	add_child(fx)
+	fx.bind(game, cam)
 
 
 ## Primeira partida 2v2: faixa explicando a troca de controle (uma vez por save).
@@ -298,14 +302,15 @@ func _on_serve_type(kind: int) -> void:
 func _on_served(p: Player, _kind: int, grade: String) -> void:
 	# saque com timing mostra a nota como os outros toques; por baixo não tem nota
 	if p == _me() and grade != "SAQUE":
-		hud.popup(grade, Color(0.45, 1.0, 0.55) if grade == "PERFEITO!" else Color(1.0, 0.95, 0.65))
+		var perfect := grade == "PERFEITO!"
+		hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65), perfect)
 
 
 func _on_touch(p: Player, grade: String, quality: float) -> void:
 	if p != _me() or grade == "SAQUE":
 		return
 	var perfect := quality >= 1.0
-	hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65))
+	hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65), perfect)
 	if config.vibration and OS.has_feature("mobile"):
 		Input.vibrate_handheld(45 if perfect else 20)
 

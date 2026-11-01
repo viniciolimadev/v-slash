@@ -20,6 +20,8 @@ func _run() -> void:
 	_test_views_do_not_change_logic()
 	print("== animação sincronizada com o contato ==")
 	_test_anim_sync()
+	print("== efeitos ==")
+	_test_fx()
 	print("== câmera (enquadramento) ==")
 	_test_camera()
 	print("== bot x bot (20 min simulados) ==")
@@ -235,6 +237,33 @@ func _test_anim_sync() -> void:
 			"toque cedo move o contato do clipe para o instante real")
 	var naive := AnimTable.distance(AnimTable.sample("set", 0.3 - 7 * DT), AnimTable.sample("set", 0.3))
 	_check(jump < 10.0 and naive > 30.0, "e a pose não salta: %.1f° no quadro da correção (sem mistura: %.1f°)" % [jump, naive])
+	_free_main(main)
+
+
+func _test_fx() -> void:
+	var main := _make_main(true)
+	var game: Game = main.get("game")
+	var fx: Fx = main.get("fx")
+	var cam: Camera3D = main.get("cam")
+	var rest := cam.global_transform
+	var seen := {"attack_trail": 0, "attacks": 0, "shake": 0, "sand": 0}
+	game.touch_made.connect(func(_p: Player, _g: String, _q: float) -> void:
+		if game.last_kind == Game.Act.ATTACK:
+			seen["attacks"] += 1
+			if fx.trail_on:
+				seen["attack_trail"] += 1
+			if fx.camera_fx.amp > 0.0:
+				seen["shake"] += 1)
+	game.ball_event.connect(func(kind: int, _pos: Vector3) -> void:
+		if kind == BallSim.Ev.LAND:
+			seen["sand"] += 1)
+	for _i in int(120.0 / DT):
+		game.tick(DT)
+	print("  %s  brilhos de PERFEITO=%d" % [seen, fx.bursts])
+	_check(seen["attacks"] > 0 and seen["attack_trail"] == seen["attacks"], "toda cortada liga o rastro")
+	_check(seen["shake"] > 0 and fx.camera_fx.amp <= Tuning.SHAKE_AMP, "cortada treme a câmera (até SHAKE_AMP)")
+	_check(fx.bursts > 0 and seen["sand"] > 0, "PERFEITO brilha no chão e a bola levanta areia")
+	_check(cam.global_transform == rest, "o tremor não mexe no enquadramento (só h/v_offset)")
 	_free_main(main)
 
 
