@@ -11,8 +11,8 @@ config_version=5
 [application]
 
 config/name="Volei Mobile"
-config/version="0.5.0"
-config/description="Fase 4: praia low-poly com personagens animados, torcida, efeitos, sons e músicas; 1v1 e 2v2 contra bot."
+config/version="1.0.0"
+config/description="Vôlei de praia 1v1 e 2v2 contra bot: segure, mire e solte no tempo certo."
 run/main_scene="res://scenes/app.tscn"
 config/quit_on_go_back=false
 config/features=PackedStringArray("4.7", "GL Compatibility")

@@ -4,7 +4,7 @@ Complementa o [SDD geral](SDD.md) (seção 9.5) e o [ROADMAP](ROADMAP.md).
 
 | | |
 |---|---|
-| Versão | 1.0 — 2026-10-31 |
+| Versão | 1.1 — 2026-11-01 (código pronto; ver seções 9 e 10) |
 | Base | Fase 4 concluída (versão 0.5.0) |
 | Versão ao fim da fase | **1.0.0** |
 | Decisões que valem aqui | DP-04 (sem multiplayer) |
@@ -222,3 +222,30 @@ Também `session_start` (versão, idioma, modelo de aparelho **não**), `tutoria
 | B5-3 | Telemetria em Cloudflare Worker + D1 | Firebase Analytics (mais completo, menos privado) |
 | B5-4 | Português + inglês no lançamento | só português |
 | B5-5 | Android primeiro; iOS só depois de avaliar o 1.0 | iOS junto |
+| B5-6 | Traduções com o **texto em português como chave** (`strings.csv`, importado pelo Godot): o `Game` continua emitindo os rótulos/motivos em português (sinais e testes estáveis) e a tela traduz com `tr()` | chaves `UI_*`/`ACT_*` |
+| B5-7 | Idioma do aparelho: português → pt_BR; **qualquer outro → inglês** | só português como padrão |
+| B5-8 | Erros em produção pelo `Logger` do Godot 4.5+ (`ErrorWatch`, só erros de **script** de `res://scripts`, até 5 por sessão), em vez de ler o `godot.log` da sessão anterior; erro do motor/driver não interrompe a partida | varrer o log no início |
+| B5-9 | A pergunta de consentimento aparece **antes** do título na 1ª abertura (fechar o app sem escolher = pergunta de novo) | depois do título |
+| B5-10 | Política de privacidade publicada como página HTML bilíngue em `web/privacidade/` (vai junto com o Pages); contato pelas Issues do GitHub, sem e-mail pessoal | `docs/privacidade.md` |
+| B5-11 | Servidor guarda só o **dia** do envio (sem hora), sem IP e sem cabeçalhos; retenção declarada de até 24 meses | hora exata |
+| B5-12 | Ícone, imagem de destaque e splash gerados por `tools/gen_store_art.py` (Pillow), na paleta das telas | arte feita à mão |
+| B5-13 | Na trilha interna o envio sai como **rascunho** (`PLAY_RELEASE_STATUS`, padrão `draft`): app novo na Play não aceita outra coisa antes da 1ª revisão | `completed` direto |
+
+---
+
+## 10. Resultado (fim da implementação)
+
+Código da fase pronto em 2026-11-01 (versão 1.0.0 no projeto; a tag ainda não foi criada).
+
+| Requisito | Onde | Teste |
+|---|---|---|
+| RF-5.01 release assinado | job `release` (tag `v*`), `tools/set_version.sh`, preset "Android Release" (AAB) | confere assinatura e versão no próprio job; **não roda em PR** |
+| RF-5.02 trilha interna | passo da Play no job `release` (com segredo) | depende da conta Play |
+| RF-5.03/5.04 consentimento e eventos | `ConsentScreen`, `Telemetry` | `_test_telemetry` (11), `_test_app_flow`, e2e "Não enviar" |
+| RF-5.05/5.09 privacidade e Sobre | `PrivacyScreen`, `AboutScreen`, `web/privacidade/` | telas nos testes de tema/idioma; e2e abre Privacidade |
+| RF-5.06 erros | `ErrorWatch`, `App._process` | `_test_error_recovery` |
+| RF-5.07 idiomas | `assets/i18n/strings.csv` (103 chaves), `Lang` | `_test_i18n`, e2e troca para inglês |
+| RF-5.08 acessibilidade | `Markers.pattern_for`, número nas costas, `UiTheme.fs` | `_test_accessibility` |
+| Backend | `server/telemetry` (Worker + D1) | `worker.test.js` (5) no CI |
+
+**Depende do dono (docs/LANCAMENTO.md):** keystore e segredos, app na Play Console e Data Safety, deploy do Worker e `TELEMETRY_URL`, projeto no itch.io, teste fechado de 14 dias e os critérios de aceite 1, 3 e 4 (produção, Android vitals, primeiro relatório real).

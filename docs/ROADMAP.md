@@ -90,7 +90,9 @@ Design detalhado: [SDD-fase-4.md](SDD-fase-4.md).
 
 ---
 
-## Fase 5 — Lançamento
+## Fase 5 — Lançamento ✅ código (publicação depende do dono)
+
+Implementada em 2026-11-01 (versão 1.0.0): release assinado por tag, upload para Play/itch.io, inglês, telemetria opcional com backend, privacidade, Sobre, recuperação de erros, acessibilidade e material da loja. O que falta (contas, chaves, teste fechado): [LANCAMENTO.md](LANCAMENTO.md); resultado em [SDD-fase-5.md, seção 10](SDD-fase-5.md#10-resultado-fim-da-implementação).
 
 Design detalhado: [SDD-fase-5.md](SDD-fase-5.md).
 

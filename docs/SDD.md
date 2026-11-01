@@ -366,6 +366,8 @@ Detalhamento completo: [SDD-fase-4.md](SDD-fase-4.md). Onde os dois divergirem, 
 ### 9.5 Fase 5 — Lançamento
 
 Detalhamento completo: [SDD-fase-5.md](SDD-fase-5.md). Onde os dois divergirem, vale o detalhado.
+
+**Código pronto** (versão 1.0.0). Desvios: decisões B5-6…B5-13 do SDD da fase. Publicação depende dos passos do dono em [LANCAMENTO.md](LANCAMENTO.md).
 Preset Android release com keystore em segredo do GitHub (`GODOT_ANDROID_KEYSTORE_RELEASE_*`), AAB para a Play Store, `version/code` incrementado pelo CI. Telemetria opcional e anônima (consentimento na 1ª abertura) com eventos de fim de partida: modo, nível, duração, rally médio, motivos de ponto. Página de privacidade.
 
 ---
