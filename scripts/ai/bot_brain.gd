@@ -162,13 +162,13 @@ func _go_to(target: Vector3) -> void:
 
 func _clearly_out() -> bool:
 	var lp := game.land_view()
-	return absf(lp.x) > Tuning.COURT_HALF_W + 0.3 or absf(lp.z) > Tuning.COURT_DEPTH + 0.3
+	return absf(lp.x) > game.court.half_w + 0.3 or absf(lp.z) > game.court.depth + 0.3
 
 
 func _choose_aim(act: int) -> Vector3:
 	var s := Game.side_of_team(p.team)
 	if act == Game.Act.RECEIVE:
-		return Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s) + _noise(0.3)
+		return game.spot(p.team, Tuning.SETTER_SPOT) + _noise(0.3)
 	if act == Game.Act.SET_BALL:
 		return game.default_aim(p) + _noise(0.2)
 	if act == Game.Act.ATTACK:
@@ -186,7 +186,7 @@ func _attack_target() -> Vector3:
 	if level == 2 and not foe_blocks:
 		dink_chance *= 0.4
 	if rng.randf() < dink_chance:
-		var w := Tuning.COURT_HALF_W - 0.8
+		var w := game.court.half_w - 0.8
 		return Vector3(rng.randf_range(-w, w), 0.0, foe_side * rng.randf_range(1.4, 2.0))
 	if level == 2 and foe_blocks:
 		return _away_from_block(foe)
@@ -195,8 +195,8 @@ func _attack_target() -> Vector3:
 
 func _away_from_block(foe: Player) -> Vector3:
 	var foe_side := -Game.side_of_team(p.team)
-	var w := Tuning.COURT_HALF_W - 0.6
-	var d := Tuning.COURT_DEPTH - 0.6
+	var w := game.court.half_w - 0.6
+	var d := game.court.depth - 0.6
 	var from := game.plan.pos if game.plan != null else p.position
 	var best := Vector3(0.0, 0.0, foe_side * d * 0.6)
 	var best_gap := -INF
@@ -214,8 +214,8 @@ func _away_from_block(foe: Player) -> Vector3:
 ## Ponto na quadra adversária. Fácil: perto de você. Médio: aleatório. Difícil: longe de você.
 func _court_target(min_depth: float) -> Vector3:
 	var foe_side := -Game.side_of_team(p.team)
-	var w := Tuning.COURT_HALF_W - 0.6
-	var d := Tuning.COURT_DEPTH - 0.6
+	var w := game.court.half_w - 0.6
+	var d := game.court.depth - 0.6
 	var foe := game.opponent_of(p.team)
 	var best := Vector3(0.0, 0.0, foe_side * d * 0.6)
 	var best_score := -INF

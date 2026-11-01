@@ -17,6 +17,7 @@ var can_dive := true                # o bot no Fácil não faz peixinho
 var diving_t := 0.0                 # s que ainda faltam no chão depois do peixinho
 var stamina := 1.0                  # 0..1; só vale com Game.stamina_on (Tuning.STAMINA_ENABLED)
 var stamina_on := false
+var court := CourtSpec.default_spec()
 
 var _jump_t := -1.0
 var _jump_target := Vector3.ZERO
@@ -197,10 +198,10 @@ func swing(kind: int) -> void:
 
 func _clamp_to_court() -> void:
 	var s := 1.0 if team == 0 else -1.0
-	var w := Tuning.COURT_HALF_W
-	var d := Tuning.COURT_DEPTH
+	var w := court.half_w
+	var d := court.depth
 	if serving:
-		position.z = s * (d + 0.9)
+		position.z = s * (d + court.serve_back)
 		position.x = clampf(position.x, -w + 0.3, w - 0.3)
 		return
 	position.x = clampf(position.x, -w - 2.5, w + 2.5)

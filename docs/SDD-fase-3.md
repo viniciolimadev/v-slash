@@ -288,3 +288,5 @@ Simulações novas: bot × bot 2v2 (Médio × Médio) e humano roteirizado com t
 | B3-3 | Controle automático em quem vai tocar | controle fixo num jogador (parceiro IA toca as bolas dele) — poderia virar opção |
 | B3-4 | 2v2 liberado desde o início, com progressão própria de níveis | liberar só depois de vencer o 1v1 Médio |
 | B3-5 | Sem troca de lado entre sets | trocar a cada 7 pontos como na praia |
+| B3-6 | `ATTACK_ZONES` e `SETTER_SPOT` continuam em metros da quadra do 1v1 e `CourtSpec.scaled()` multiplica pela razão entre as quadras (no 1v1 a razão é exatamente 1: mesmos números de antes, sem erro de arredondamento) | frações da quadra, como o esboço |
+| B3-7 | Comprimento da rede = `half_w + NET_OVERHANG` (0,7 m), para valer nos dois modos | `net_half_len` fixo por modo |

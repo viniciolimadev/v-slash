@@ -176,7 +176,7 @@ func _update_block_shadow(act: int) -> void:
 	if dir.length() < 0.1:
 		return
 	dir = dir.normalized()
-	var length := Tuning.COURT_DEPTH
+	var length := game.court.depth
 	var mid := hands + dir * (length * 0.5)
 	_block_shadow.visible = true
 	_block_shadow.position = Vector3(mid.x, 0.02, mid.z)

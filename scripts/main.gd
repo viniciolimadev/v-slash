@@ -15,6 +15,7 @@ var autoplay := false               # os dois lados controlados pela IA
 var config: MatchConfig = null      # null = padrão (rally infinito contra o Fácil)
 var save: SaveData = null           # só com o App: habilita Opções e Sair na pausa
 var game: Game
+var court_spec: CourtSpec           # quadra do modo da config
 var human: Player
 var foe: Player
 var controls: TouchControls
@@ -73,7 +74,10 @@ func _build_world() -> void:
 	sun.light_energy = 1.0
 	add_child(sun)
 
-	add_child(Court.new())
+	court_spec = CourtSpec.for_mode(config.mode)
+	var court := Court.new()
+	court.spec = court_spec
+	add_child(court)
 
 	# câmera atrás do seu lado, alta o bastante para ver as duas quadras
 	cam = Camera3D.new()
@@ -95,6 +99,7 @@ func _build_match() -> void:
 	var ball := Ball.new()
 	add_child(ball)
 	game = Game.new()
+	game.court = court_spec
 	add_child(game)
 	var players: Array[Player] = [human, foe]
 	var bots: Array[BotBrain] = []

@@ -32,6 +32,8 @@ func _run() -> void:
 	_test_aim()
 	print("== assistência de mira ==")
 	_test_aim_assist()
+	print("== quadra por modo (CourtSpec) ==")
+	_test_court_spec()
 	print("== plano de contato ==")
 	_test_contact_plan()
 	print("== HitResolver (mesmos números do código antigo) ==")
@@ -394,7 +396,7 @@ func _test_aim_assist() -> void:
 	game.human_press(human)
 	game.human_drag(human, Vector2(5000.0, -5000.0))
 	var a: Vector3 = game.human_aim
-	_check(Game.is_inside(a) and absf(a.x) <= Tuning.COURT_HALF_W - Tuning.AIM_MARGIN + 0.01,
+	_check(game.is_inside(a) and absf(a.x) <= game.court.half_w - Tuning.AIM_MARGIN + 0.01,
 			"mira presa dentro da quadra (%s)" % a)
 	# ímã: perto do canto do fundo gruda em FUNDO DIR/ESQ
 	game.human_aim = Vector3(2.0 * s, 0.0, -5.2 * s)
@@ -410,8 +412,8 @@ func _test_aim_assist() -> void:
 	# bot não ganha ímã de ataque/recepção
 	_check(game.aim_magnets(foe, Game.Act.ATTACK).is_empty(), "bot sem assistência de mira")
 	# toque bom: alvo fora da quadra é trazido para dentro
-	var k := Game.keep_inside(Vector3(9.0, 0.0, -12.0))
-	_check(Game.is_inside(k), "toque BOM não manda a bola para fora (%s)" % k)
+	var k := game.keep_inside(Vector3(9.0, 0.0, -12.0))
+	_check(game.is_inside(k), "toque BOM não manda a bola para fora (%s)" % k)
 	_free_main(main)
 
 
@@ -428,6 +430,35 @@ func _drag(index: int, pos: Vector2) -> InputEventScreenDrag:
 	e.index = index
 	e.position = pos
 	return e
+
+
+func _test_court_spec() -> void:
+	var one := CourtSpec.for_mode(MatchConfig.Mode.ONE_V_ONE)
+	var two := CourtSpec.for_mode(MatchConfig.Mode.TWO_V_TWO)
+	_check(one.half_w == 3.5 and one.depth == 7.0 and is_equal_approx(one.net_half_len, 4.2),
+			"1v1: quadra 7 × 7 por lado, rede até 4,2 m (como na Fase 2)")
+	_check(two.half_w == 4.0 and two.depth == 8.0, "2v2: quadra 8 × 8 por lado")
+	var p := Vector3(3.8, 0.0, -7.5)
+	_check(not one.is_inside(p) and two.is_inside(p), "o mesmo ponto é fora no 1v1 e dentro no 2v2")
+	_check(two.keep_inside(Vector3(9.0, 0.0, 12.0)).is_equal_approx(Vector3(3.7, 0.0, 7.7)), "keep_inside usa a quadra do modo")
+	_check(one.scaled(2.6, 5.8) == Vector2(2.6, 5.8), "1v1: zonas de mira nos mesmos metros de antes")
+	var cfg := MatchConfig.new()
+	cfg.mode = MatchConfig.Mode.TWO_V_TWO
+	var main := _make_main_cfg(cfg)
+	var game: Game = main.get("game")
+	_check(game.court.depth == 8.0 and game.ball.sim.court == game.court and game.human.court == game.court,
+			"partida 2v2: Game, bola e jogadores na quadra 8 × 8")
+	var antenna := BallSim.new()
+	antenna.court = game.court
+	antenna.pos = Vector3(3.8, 3.0, 1.0)
+	antenna.vel = BallSim.launch_velocity(antenna.pos, Vector3(3.8, Tuning.BALL_RADIUS, -3.0), 1.0)
+	var seen := -1
+	while not antenna.landed and seen < 0:
+		for e in antenna.advance(DT):
+			if int(e["type"]) == BallSim.Ev.CROSS or int(e["type"]) == BallSim.Ev.ANTENNA:
+				seen = int(e["type"])
+	_check(seen == BallSim.Ev.CROSS, "2v2: bola em x = 3,8 passa dentro das antenas")
+	_free_main(main)
 
 
 func _test_contact_plan() -> void:
@@ -754,7 +785,7 @@ func _test_block() -> void:
 			ok = ok and landed_z > 0.0 and game.plan != null and game.plan.player == human \
 					and game.plan.act == Game.Act.RECEIVE and game.plan.n == 1
 		else:
-			ok = ok and absf(target.x) > Tuning.COURT_HALF_W
+			ok = ok and absf(target.x) > game.court.half_w
 		_check(ok, "pico %+.2f s: %s, bloqueio não conta toque (%s, cai em %s)" % [e, expect[e], hit[0], target])
 
 	# cortada mirada longe das mãos passa
@@ -796,7 +827,7 @@ func _test_dink() -> void:
 	var pred := game.ball.sim.predict()
 	var land: Vector3 = pred["land"]
 	_check(used[0] == 1 and game.last_kind == Game.Act.DINK, "bot mirando a 1,8 m da rede larga")
-	_check(not bool(pred["blocked"]) and land.z > 0.0 and Game.is_inside(land),
+	_check(not bool(pred["blocked"]) and land.z > 0.0 and game.is_inside(land),
 			"largada passa por cima do bloqueio perfeito e cai dentro (%s)" % land)
 	_free_main(main)
 

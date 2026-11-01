@@ -47,6 +47,7 @@ var land_display := Vector3.ZERO    # ponto de queda "sem efeito" (flutuante); v
 var land_t := 0.0                   # relógio do pouso previsto
 var bot_level := 0                  # começa no Fácil: a meta da Fase 0 é sentir o gesto
 var rng := RandomNumberGenerator.new()
+var court := CourtSpec.default_spec()   # defina antes de setup() (main.gd, pelo modo)
 var resolver := HitResolver.new(rng)
 
 var human_aiming := false
@@ -66,7 +67,10 @@ func setup(p_ball: Ball, p_players: Array[Player], p_bots: Array[BotBrain]) -> v
 	ball = p_ball
 	players = p_players
 	bots = p_bots
+	ball.court = court
+	resolver.court = court
 	for p in players:
+		p.court = court
 		if p.is_human:
 			human = p
 			# começa no fundo da quadra adversária
@@ -138,9 +142,15 @@ static func side_of_point(v: Vector3) -> float:
 	return 1.0 if v.z > 0.0 else -1.0
 
 
-static func is_inside(v: Vector3) -> bool:
-	var tol := Tuning.LINE_TOLERANCE
-	return absf(v.x) <= Tuning.COURT_HALF_W + tol and absf(v.z) <= Tuning.COURT_DEPTH + tol
+func is_inside(v: Vector3) -> bool:
+	return court.is_inside(v)
+
+
+## Ponto escrito para o time 0 na quadra do 1v1 (Tuning), na quadra deste modo e do lado do time.
+func spot(team: int, v: Vector2) -> Vector3:
+	var k := court.scaled(v.x, v.y)
+	var s := side_of_team(team)
+	return Vector3(k.x * s, 0.0, k.y * s)
 
 
 ## Ação que o botão faria agora para este jogador.
@@ -261,12 +271,13 @@ func aim_magnets(p: Player, act: int) -> Array:
 		return []
 	if act == Act.RECEIVE:
 		return [{"name": "LEVANTADOR", "quick": false,
-				"pos": Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s)}]
+				"pos": spot(p.team, Tuning.SETTER_SPOT)}]
 	var out := []
 	for z in Tuning.ATTACK_ZONES:
 		var v: Vector2 = z[1]
 		# câmera atrás do time 0: direita da tela = +x; o time 1 vê espelhado
-		out.append({"name": z[0], "quick": false, "pos": Vector3(v.x * s, 0.0, -v.y * s)})
+		var k := court.scaled(v.x, v.y)
+		out.append({"name": z[0], "quick": false, "pos": Vector3(k.x * s, 0.0, -k.y * s)})
 	return out
 
 
@@ -317,17 +328,17 @@ func default_aim(p: Player) -> Vector3:
 	if act == Act.NONE:
 		return p.position
 	if act == Act.RECEIVE:
-		return Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s)
+		return spot(p.team, Tuning.SETTER_SPOT)
 	if act == Act.SET_BALL:
 		return _high_set_point(p.team)
-	return Vector3(0.0, 0.0, -s * Tuning.COURT_DEPTH * 0.6)
+	return Vector3(0.0, 0.0, -s * court.depth * 0.6)
 
 
 func clamp_aim(p: Player, a: Vector3, act: int = -1) -> Vector3:
 	var s := side_of_team(p.team)
 	# assistência: a mira nunca sai da quadra
-	var w := Tuning.COURT_HALF_W - Tuning.AIM_MARGIN
-	var d := Tuning.COURT_DEPTH - Tuning.AIM_MARGIN
+	var w := court.half_w - Tuning.AIM_MARGIN
+	var d := court.depth - Tuning.AIM_MARGIN
 	var out := Vector3(clampf(a.x, -w, w), 0.0, clampf(a.z, -d, d))
 	if act < 0:
 		act = aim_act(p)
@@ -639,10 +650,8 @@ func _whiff(p: Player, why: String) -> void:
 
 
 ## Assistência: traz o alvo para dentro da quadra (com folga das linhas).
-static func keep_inside(v: Vector3, margin: float = 0.3) -> Vector3:
-	var w := Tuning.COURT_HALF_W - margin
-	var d := Tuning.COURT_DEPTH - margin
-	return Vector3(clampf(v.x, -w, w), v.y, clampf(v.z, -d, d))
+func keep_inside(v: Vector3, margin: float = 0.3) -> Vector3:
+	return court.keep_inside(v, margin)
 
 
 ## Garante o alvo do lado `s` (+1/-1), a pelo menos min_dist da rede.
@@ -718,7 +727,7 @@ func _closest_player(team: int, at: Vector3) -> Player:
 
 func _high_set_point(team: int) -> Vector3:
 	var s := side_of_team(team)
-	var base := Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s)
+	var base := spot(team, Tuning.SETTER_SPOT)
 	if plan != null and plan.team == team:
 		base = plan.pos
 	return Vector3(clampf(base.x, -2.5, 2.5), 0.0, s * clampf(absf(base.z) - 0.5, 1.2, 4.0))
@@ -845,7 +854,7 @@ func _reset_for_serve(team: int) -> void:
 		p.reset_state()
 		p.serving = p == server
 		if p == server:
-			p.position = Vector3(1.2 * s, 0.0, s * (Tuning.COURT_DEPTH + 0.9))
+			p.position = Vector3(1.2 * s, 0.0, s * (court.depth + court.serve_back))
 		else:
 			p.position = Vector3(0.0, 0.0, s * 4.2)
 	ball.hold(server)

@@ -2,12 +2,14 @@ class_name Court
 extends Node3D
 ## Quadra, linhas, rede e antenas com formas simples (arte entra na Fase 4).
 
+var spec := CourtSpec.default_spec()    # defina antes de entrar na árvore
+
 
 func _ready() -> void:
-	var w := Tuning.COURT_HALF_W
-	var d := Tuning.COURT_DEPTH
+	var w := spec.half_w
+	var d := spec.depth
 	var nh := Tuning.NET_HEIGHT
-	var nl := Tuning.NET_HALF_LEN
+	var nl := spec.net_half_len
 	# chão, área livre e quadra (alturas diferentes para não piscar)
 	_box(Vector3(80.0, 0.1, 80.0), Vector3(0.0, -0.06, 0.0), Color(0.2, 0.45, 0.38))
 	_box(Vector3(w * 2.0 + 5.0, 0.02, d * 2.0 + 6.0), Vector3(0.0, -0.01, 0.0), Color(0.33, 0.55, 0.72))
