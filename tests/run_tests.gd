@@ -16,6 +16,8 @@ func _initialize() -> void:
 func _run() -> void:
 	print("== física da bola ==")
 	_test_physics()
+	print("== views não mudam a lógica (ADR-09) ==")
+	_test_views_do_not_change_logic()
 	print("== câmera (enquadramento) ==")
 	_test_camera()
 	print("== bot x bot (20 min simulados) ==")
@@ -149,6 +151,36 @@ func _test_physics() -> void:
 	var d := BallSim.find_descent(up.predict(), Tuning.H_SET, 1.0)
 	_check(not d.is_empty() and absf(float(d["t"]) - Tuning.T_RECEIVE) < 0.01,
 			"preditor acha o ponto de contato do levantamento")
+
+
+## Mesmas sementes com e sem views (--no-views): a partida tem de sair idêntica.
+func _test_views_do_not_change_logic() -> void:
+	for two in [false, true]:
+		var traces: Array[String] = []
+		for with_views in [true, false]:
+			var cfg := MatchConfig.new()
+			if two:
+				cfg.mode = MatchConfig.Mode.TWO_V_TWO
+			var main: Node = load("res://scenes/main.tscn").instantiate()
+			main.set("autoplay", true)
+			main.set("views", with_views)
+			main.set("config", cfg)
+			root.add_child(main)
+			var game: Game = main.get("game")
+			game.rng.seed = 77
+			for b in game.bots:
+				b.rng.seed = 100 + game.players.find(b.p)
+			var log: PackedStringArray = []
+			game.point_scored.connect(func(team: int, why: String) -> void:
+				log.append("%d %s %d %.3f %s" % [team, why, game.rally_touches, game.time, game.ball.position.snapped(Vector3.ONE * 0.001)]))
+			for _i in int(300.0 / DT):
+				game.tick(DT)
+			var has_view := game.players[0].get_child_count() > 0
+			_check(has_view == with_views, "%s: views %s" % ["2v2" if two else "1v1", "presentes" if with_views else "ausentes (--no-views)"])
+			traces.append("\n".join(log))
+			_free_main(main)
+		var n := traces[0].count("\n") + 1
+		_check(traces[0] == traces[1] and n > 20, "%s: 5 min bot x bot iguais com e sem views (%d pontos)" % ["2v2" if two else "1v1", n])
 
 
 func _test_camera() -> void:

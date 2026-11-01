@@ -3,6 +3,7 @@ extends Node3D
 ## Uma partida: monta tudo por código (quadra, câmera, jogadores, bola, marcadores e UI).
 ## O App define `config` (e `save`) antes de adicionar a cena; sozinha, roda em rally infinito.
 ## Demo bot x bot: rode com o argumento de usuário  -- --autoplay
+## Só lógica (simulações rápidas, sem modelos, quadra nem efeitos):  -- --no-views
 
 signal match_finished(result: MatchResult)
 signal exit_requested
@@ -12,6 +13,7 @@ const HOME_COLOR := Color(0.13, 0.58, 0.92)
 const AWAY_COLOR := Color(0.95, 0.42, 0.24)
 
 var autoplay := false               # os dois lados controlados pela IA
+var views := true                   # false = --no-views: a lógica roda igual, sem nada de visual (ADR-09)
 var config: MatchConfig = null      # null = padrão (rally infinito contra o Fácil)
 var save: SaveData = null           # só com o App: habilita Opções e Sair na pausa
 var game: Game
@@ -34,6 +36,8 @@ var _finished := false
 func _ready() -> void:
 	if "--autoplay" in OS.get_cmdline_user_args():
 		autoplay = true
+	if "--no-views" in OS.get_cmdline_user_args():
+		views = false
 	if config == null:
 		config = MatchConfig.new()
 	_setup_input()
@@ -77,9 +81,10 @@ func _build_world() -> void:
 	add_child(sun)
 
 	court_spec = CourtSpec.for_mode(config.mode)
-	var court := Court.new()
-	court.spec = court_spec
-	add_child(court)
+	if views:
+		var court := Court.new()
+		court.spec = court_spec
+		add_child(court)
 
 	# câmera atrás do seu lado, alta o bastante para ver as duas quadras
 	cam = Camera3D.new()
@@ -142,6 +147,8 @@ func _build_match() -> void:
 			for q in game.teams[p.team].players:
 				q.set_ring(2 if q == p else 1, q == p))
 	stats.attach(game)
+	if views:
+		_attach_views(ball)
 	markers = Markers.new()
 	add_child(markers)
 	markers.setup(game, human)
@@ -150,6 +157,17 @@ func _build_match() -> void:
 		tutorial.setup(game, human, markers)
 		add_child(tutorial)
 		tutorial.finished.connect(func(skipped: bool) -> void: tutorial_finished.emit(skipped))
+
+
+## Views (ADR-09): filhas da lógica, só observam. Sem elas (--no-views) a partida é a mesma.
+func _attach_views(ball: Ball) -> void:
+	for p in game.players:
+		var v: PlayerView = PlayerViewSimple.new()
+		p.add_child(v)
+		v.bind(p, game)
+	var bv := BallView.new()
+	ball.add_child(bv)
+	bv.bind(ball)
 
 
 ## Primeira partida 2v2: faixa explicando a troca de controle (uma vez por save).
