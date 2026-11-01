@@ -58,7 +58,7 @@ jobs:
           ! grep -q "SCRIPT ERROR" test.log
           grep -q "falhas: 0" test.log
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
@@ -195,7 +195,7 @@ jobs:
           echo "VERSION_NAME=$name" >> "$GITHUB_ENV"
           tools/set_version.sh $(( GITHUB_RUN_NUMBER + 100 )) "$name" "$TELEMETRY_URL"
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
