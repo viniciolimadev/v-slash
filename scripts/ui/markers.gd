@@ -18,6 +18,8 @@ var _magnet_dots: Array[MeshInstance3D] = []
 var _hl_dot: MeshInstance3D
 var _hl_label: Label3D
 var _hl_name := ""
+var _block_shadow: MeshInstance3D
+var _stamina_bars: Array[MeshInstance3D] = []
 
 
 func setup(g: Game, h: Player) -> void:
@@ -44,6 +46,21 @@ func setup(g: Game, h: Player) -> void:
 		# ponto no chão de cada zona de mira (o escolhido fica amarelo)
 		_magnet_dots.append(_disk(0.3, _flat(Color(1.0, 1.0, 1.0, 0.45))))
 	_hl_dot = _disk(0.45, _flat(Color(0.3, 1.0, 0.45, 0.7)))
+	# sombra do bloqueio adversário: faixa no chão atrás das mãos dele, enquanto você mira o ataque
+	_block_shadow = MeshInstance3D.new()
+	var strip := BoxMesh.new()
+	strip.size = Vector3((Tuning.BLOCK_HALF_W + Tuning.BALL_RADIUS) * 2.0, 0.01, 1.0)
+	_block_shadow.mesh = strip
+	_block_shadow.material_override = _flat(Color(0.1, 0.0, 0.25, 0.35))
+	add_child(_block_shadow)
+	for _p in game.players:
+		var bar := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.7, 0.07, 0.02)
+		bar.mesh = bm
+		bar.material_override = _flat(Color(0.3, 1.0, 0.4))
+		add_child(bar)
+		_stamina_bars.append(bar)
 	_hl_label = _label(56)
 	_hl_label.pixel_size = 0.011
 	_hl_label.modulate = Color(0.4, 1.0, 0.5)
@@ -68,8 +85,9 @@ func refresh() -> void:
 	_shadow.scale = Vector3(k, 1.0, k)
 
 	# ponto de queda (se ninguém tocar)
-	_land.visible = flying
-	_land.position = Vector3(game.land_point.x, 0.02, game.land_point.z)
+	_land.visible = flying and game.state != Game.State.SERVE_TOSS
+	var lv := game.land_view()
+	_land.position = Vector3(lv.x, 0.02, lv.z)
 
 	# zona destacada (tutorial)
 	_hl_dot.visible = false
@@ -84,27 +102,32 @@ func refresh() -> void:
 				_hl_dot.visible = true
 				_hl_label.visible = true
 
-	# anel de timing: só quando a bola é sua
+	# anel de timing: só quando a bola é sua (ou o bloqueio: anel na rede, solte quando fechar)
 	var plan := game.plan
+	var act := game.current_act(human)
 	var mine: bool = flying and plan != null and plan.player == human
-	_ring.visible = mine
+	var block: bool = flying and act == Game.Act.BLOCK
+	_ring.visible = mine or block
 	_approach.visible = false
-	if mine:
-		var at := plan.pos
+	if mine or block:
+		var at := game.plan_view_pos(plan) if mine else game.block_plan.pos
 		_ring.position = Vector3(at.x, 0.04, at.z)
-		_ring_mat.albedo_color = _act_color(plan.act)
-		var remaining := plan.t - game.time
+		_ring_mat.albedo_color = _act_color(act)
+		var remaining := (plan.t if mine else game.block_release_t()) - game.time
 		if remaining > -Tuning.WINDOW_LATE:
 			_approach.visible = true
 			_approach.position = _ring.position
 			var sc := 1.0 + 2.2 * clampf(remaining / Tuning.RING_LEAD, 0.0, 1.0)
 			_approach.scale = Vector3(sc, 1.0, sc)
-			if absf(remaining) <= Tuning.PERFECT:
+			if absf(remaining) <= Tuning.PERFECT * game.window_scale():
 				_approach_mat.albedo_color = Color(0.3, 1.0, 0.4)
 			elif remaining < 0.0:
 				_approach_mat.albedo_color = Color(1.0, 0.35, 0.3)
 			else:
 				_approach_mat.albedo_color = Color(1.0, 1.0, 1.0, 0.9)
+
+	_update_block_shadow(act)
+	_update_stamina_bars()
 
 	# mira (sempre visível; fica onde você deixou por último)
 	var aim := game.human_aim_view()
@@ -118,9 +141,9 @@ func refresh() -> void:
 
 	# alvos da jogada (enquanto você segura o botão)
 	var show_magnets := not aim.is_empty() and game.human_aiming
-	var mags := game.aim_magnets(human, game.current_act(human)) if show_magnets else []
+	var mags := game.aim_magnets(human, game.aim_act(human)) if show_magnets else []
 	# nomes só no levantamento (no resto, o nome da zona escolhida aparece na mira)
-	var named := game.current_act(human) == Game.Act.SET_BALL
+	var named := game.aim_act(human) == Game.Act.SET_BALL
 	for i in _magnet_labels.size():
 		var l := _magnet_labels[i]
 		var dot := _magnet_dots[i]
@@ -139,13 +162,56 @@ func refresh() -> void:
 					Color(1.0, 0.85, 0.2, 0.9) if picked else Color(1.0, 1.0, 1.0, 0.45)
 
 
+## Onde o bloqueio do adversário pegaria se ele pulasse agora: da bola, passando pelas mãos dele.
+func _update_block_shadow(act: int) -> void:
+	_block_shadow.visible = false
+	if act != Game.Act.ATTACK or game.plan == null:
+		return
+	var foe := game.opponent_of(human.team)
+	if foe == null or absf(foe.position.z) > Tuning.BLOCK_ZONE:
+		return
+	var from := game.plan.pos
+	var hands := Vector3(foe.position.x, 0.0, -Game.side_of_team(human.team) * Tuning.BLOCK_DEPTH)
+	var dir := Vector3(hands.x - from.x, 0.0, hands.z - from.z)
+	if dir.length() < 0.1:
+		return
+	dir = dir.normalized()
+	var length := Tuning.COURT_DEPTH
+	var mid := hands + dir * (length * 0.5)
+	_block_shadow.visible = true
+	_block_shadow.position = Vector3(mid.x, 0.02, mid.z)
+	_block_shadow.rotation = Vector3(0.0, atan2(dir.x, dir.z), 0.0)
+	_block_shadow.scale = Vector3(1.0, 1.0, length)
+
+
+## Barra fina sobre cada jogador (só com a stamina ligada); vermelha quando cansado.
+func _update_stamina_bars() -> void:
+	for i in _stamina_bars.size():
+		var bar := _stamina_bars[i]
+		var p := game.players[i]
+		bar.visible = game.stamina_on
+		if not bar.visible:
+			continue
+		var k := maxf(p.stamina, 0.02)
+		bar.position = p.position + Vector3(0.35 * (k - 1.0), 2.25, 0.0)
+		bar.scale = Vector3(k, 1.0, 1.0)
+		(bar.material_override as StandardMaterial3D).albedo_color = \
+				Color(1.0, 0.3, 0.25) if p.is_tired() else Color(0.3, 1.0, 0.4)
+
+
 func _act_color(act: int) -> Color:
 	if act == Game.Act.SET_BALL:
 		return Color(0.35, 0.6, 1.0)
 	if act == Game.Act.ATTACK:
 		return Color(1.0, 0.55, 0.2)
+	if act == Game.Act.DINK:
+		return Color(1.0, 0.8, 0.35)
 	if act == Game.Act.FREEBALL:
 		return Color(0.85, 0.85, 0.85)
+	if act == Game.Act.BLOCK:
+		return Color(0.75, 0.4, 1.0)
+	if act == Game.Act.DIVE:
+		return Color(1.0, 0.45, 0.1)
 	return Color(0.25, 0.85, 0.75)
 
 

@@ -20,6 +20,8 @@ func _run() -> void:
 	_test_camera()
 	print("== bot x bot (20 min simulados) ==")
 	_test_bot_vs_bot()
+	print("== bot x bot: mecânicas da Fase 2 (Médio x Difícil, 15 min) ==")
+	_test_bot_mechanics()
 	print("== humano roteirizado: aperta, mira e solta no tempo ==")
 	_test_scripted_human()
 	print("== controles de toque ==")
@@ -32,6 +34,20 @@ func _run() -> void:
 	_test_aim_assist()
 	print("== plano de contato ==")
 	_test_contact_plan()
+	print("== HitResolver (mesmos números do código antigo) ==")
+	_test_hit_resolver()
+	print("== tipos de saque ==")
+	_test_serve_types()
+	print("== saque flutuante ==")
+	_test_float_physics()
+	print("== bloqueio ==")
+	_test_block()
+	print("== largada ==")
+	_test_dink()
+	print("== peixinho ==")
+	_test_dive()
+	print("== stamina (experimento) ==")
+	_test_stamina()
 	print("== regras da partida (sets) ==")
 	_test_match_rules()
 	print("== partida completa bot x bot ==")
@@ -175,6 +191,51 @@ func _test_bot_vs_bot() -> void:
 	_free_main(main)
 
 
+func _test_bot_mechanics() -> void:
+	var main := _make_main(true)
+	var game: Game = main.get("game")
+	game.set_bot_level(2)                   # time 1 = Difícil; o time 0 (autoplay) é o Médio
+	game.rng.seed = 21
+	for b in game.bots:
+		b.rng.seed = 21 + b.p.team
+	var names := ["Médio", "Difícil"]
+	var use := [{}, {}]
+	var stats := {"last": 0.0, "gap": 0.0, "points": 0}
+	var mark := func() -> void:
+		stats["gap"] = maxf(float(stats["gap"]), game.time - float(stats["last"]))
+		stats["last"] = game.time
+	game.served.connect(func(p: Player, kind: int, _g: String) -> void:
+		var k: String = ServeType.NAMES[kind]
+		use[p.team][k] = int(use[p.team].get(k, 0)) + 1
+		mark.call())
+	game.action_used.connect(func(p: Player, act: int) -> void:
+		var k: String = Game.ACT_LABELS[act]
+		use[p.team][k] = int(use[p.team].get(k, 0)) + 1)
+	game.touch_made.connect(func(p: Player, _g: String, _q: float) -> void:
+		if game.last_kind == Game.Act.BLOCK and game.last_team == p.team:
+			use[p.team]["MÃOS"] = int(use[p.team].get("MÃOS", 0)) + 1
+		mark.call())
+	game.point_scored.connect(func(_t: int, _w: String) -> void:
+		stats["points"] += 1
+		mark.call())
+	for _i in int(900.0 / DT):
+		game.tick(DT)
+	for team in 2:
+		print("  %-7s %s" % [names[team], use[team]])
+	print("  pontos=%d  placar=%d x %d  maior tempo sem evento=%.1f s" % [
+			stats["points"], game.rules.points[0], game.rules.points[1], stats["gap"]])
+	var want := [["FLUTUANTE", "BLOQUEAR", "LARGAR", "PEIXINHO"],
+			["FLUTUANTE", "VIAGEM", "BLOQUEAR", "LARGAR", "PEIXINHO"]]
+	for team in 2:
+		var missing := []
+		for k in want[team]:
+			if int(use[team].get(k, 0)) == 0:
+				missing.append(k)
+		_check(missing.is_empty(), "%s usa as mecânicas novas (faltou: %s)" % [names[team], missing])
+	_check(float(stats["gap"]) < 8.0, "com bloqueio, saque com lançamento e peixinho, nunca trava")
+	_free_main(main)
+
+
 func _test_scripted_human() -> void:
 	var main := _make_main(false)
 	var game: Game = main.get("game")
@@ -194,7 +255,7 @@ func _test_scripted_human() -> void:
 	var serve_timer := 0.0
 	for _i in int(600.0 / DT):
 		human.move_input = Vector2.ZERO
-		var act := game.current_act(human)
+		var act := _phase1_act(game, human)
 		if act == Game.Act.SERVE:
 			serve_timer += DT
 			if not pressed and serve_timer > 0.5:
@@ -284,7 +345,7 @@ func _test_aim() -> void:
 	var z: float = (view["pos"] as Vector3).z if not view.is_empty() else 0.0
 	_check(z * -s >= Tuning.AIM_DEEP - 0.01, "mira começa no fundo da quadra adversária (z=%.1f)" % z)
 	# arrasta e solta: a mira fica onde estava, também nas jogadas seguintes
-	var act := game.current_act(human)
+	var act := _phase1_act(game, human)
 	game.human_press(human)
 	game.human_drag(human, Vector2(-120.0, 60.0))
 	var left_at: Vector3 = game.human_aim
@@ -384,6 +445,482 @@ func _test_contact_plan() -> void:
 	game.touches = Tuning.MAX_TOUCHES
 	game._make_plan()
 	_check(game.plan == null, "toque além de MAX_TOUCHES não gera plano (a bola cai)")
+	_free_main(main)
+
+
+func _test_hit_resolver() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var foe: Player = main.get("foe")
+	# [time, ação, bola no contato, mira, q, cap, velocidade de saída gravada da Fase 1 (semente 100 + i)]
+	var cases := [
+		[0, Game.Act.RECEIVE, Vector3(0.0, 0.9, 4.0), Vector3(0.8, 0, 1.6), 1.0, 1.0, Vector3(0.5925926, 8.425, -1.7777778)],
+		[0, Game.Act.RECEIVE, Vector3(1.0, 0.9, 5.0), Vector3(2.0, 0, 3.0), 0.35, 1.0, Vector3(0.74478984, 7.688778, -1.7320404)],
+		[0, Game.Act.SET_BALL, Vector3(0.5, 2.25, 1.8), Vector3(0.0, 0, 0.9), 0.7, 1.0, Vector3(-0.60652065, 5.1916666, -0.7462158)],
+		[0, Game.Act.SET_BALL, Vector3(0.5, 2.25, 1.8), Vector3(-1.0, 0, -3.0), 0.7, 1.0, Vector3(-1.0793442, 6.8566666, -3.3409824)],
+		[0, Game.Act.ATTACK, Vector3(0.0, 3.05, 1.5), Vector3(2.6, 0, -5.8), 1.0, 1.0, Vector3(4.697263, -0.79307765, -13.18847)],
+		[0, Game.Act.ATTACK, Vector3(0.0, 3.05, 1.5), Vector3(-2.0, 0, -3.0), 0.35, 1.0, Vector3(-3.6223698, 0.6058035, -6.7545953)],
+		[1, Game.Act.ATTACK, Vector3(0.0, 3.05, -1.5), Vector3(1.0, 0, 4.0), 0.7, 0.5, Vector3(1.2948216, -0.42196736, 8.677219)],
+		[0, Game.Act.FREEBALL, Vector3(0.0, 2.25, 3.0), Vector3(0.0, 0, -4.0), 0.7, 1.0, Vector3(-0.081518985, 6.8566666, -3.9796379)],
+	]
+	var worst := 0.0
+	for i in cases.size():
+		var c: Array = cases[i]
+		var p: Player = human if c[0] == 0 else foe
+		game.rng.seed = 100 + i
+		game.state = Game.State.PLAY
+		var from: Vector3 = c[2]
+		p.position = Vector3(from.x, 0.0, from.z)
+		game.ball.launch(from, Vector3.ZERO)
+		game.plan = ContactPlan.new(p.team, 1, c[1], game.time, from, p)
+		var shot := game.resolver.resolve(game, p, c[1], c[3], c[4], c[5])
+		worst = maxf(worst, shot.vel.distance_to(c[6]))
+	_check(worst < 1e-4, "mesma semente = mesma saída da bola que a Fase 1 (diferença %.6f)" % worst)
+	_free_main(main)
+
+
+## Partida nova com você sacando o tipo `kind`. Para o flutuante/viagem, já aperta (lança a bola).
+func _serve_setup(kind: int, press: bool) -> Node:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	game.serve_type[human.team] = kind
+	game.tick(DT)
+	if press:
+		game.human_press(human)
+	return main
+
+
+## Solta o botão `err` segundos depois do tempo ideal do plano (relógio ajustado, sem esperar).
+func _release_at(game: Game, human: Player, err: float) -> Array:
+	var got := [""]
+	game.served.connect(func(_p: Player, _k: int, grade: String) -> void: got[0] = grade)
+	game.whiffed.connect(func(_p: Player, why: String) -> void: got[0] = "ERRO " + why)
+	while game.time < game.plan.t - 0.4:
+		game.tick(DT)
+	game.time = game.plan.t + err
+	game.human_release(human)
+	for _i in 30:
+		game.tick(DT)
+	return got
+
+
+func _test_serve_types() -> void:
+	var main := _serve_setup(ServeType.Kind.UNDER, true)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	_check(game.state == Game.State.SERVE_WAIT, "POR BAIXO: apertar não lança a bola")
+	game.human_release(human)
+	_check(game.state == Game.State.PLAY and game.last_team == human.team, "POR BAIXO: soltar saca direto")
+	_free_main(main)
+
+	main = _serve_setup(ServeType.Kind.FLOAT, true)
+	game = main.get("game")
+	human = main.get("human")
+	var plan: ContactPlan = game.plan
+	_check(game.state == Game.State.SERVE_TOSS and plan != null and plan.act == Game.Act.SERVE
+			and plan.player == human and plan.t > game.time + 0.3,
+			"FLUTUANTE: apertar lança a bola e cria o plano de saque")
+	_check(game.action_label(human) == "SACAR", "botão continua SACAR com a bola no ar")
+	var got := _release_at(game, human, 0.0)
+	_check(got[0] == "PERFEITO!" and game.state == Game.State.PLAY, "soltar no tempo ideal = saque PERFEITO (%s)" % got[0])
+	_free_main(main)
+
+	main = _serve_setup(ServeType.Kind.FLOAT, true)
+	game = main.get("game")
+	var point := [-1, ""]
+	game.point_scored.connect(func(team: int, why: String) -> void:
+		point[0] = team
+		point[1] = why)
+	for _i in int(3.0 / DT):
+		game.tick(DT)
+	_check(point[0] == 1 and point[1] == "Saque perdido", "bola lançada que cai = ponto do adversário (%s)" % point[1])
+	_free_main(main)
+
+	var grades := []
+	for kind in [ServeType.Kind.FLOAT, ServeType.Kind.JUMP]:
+		main = _serve_setup(kind, true)
+		grades.append(_release_at(main.get("game"), main.get("human"), -0.12)[0])
+		_free_main(main)
+	_check(grades == ["BOM", "CEDO"], "soltar 0,12 s antes: BOM no flutuante, CEDO na viagem (%s)" % [grades])
+
+	# nunca trava: cada tipo saca e a bola chega do outro lado
+	for kind in ServeType.NAMES.size():
+		main = _serve_setup(kind, true)
+		game = main.get("game")
+		human = main.get("human")
+		if ServeType.is_tossed(kind):
+			_release_at(game, human, 0.0)
+		else:
+			game.human_release(human)
+		var crossed := false
+		for _i in int(3.0 / DT):
+			game.tick(DT)
+			if game.ball.position.z < 0.0:
+				crossed = true
+		_check(crossed, "%s perfeito passa a rede" % ServeType.NAMES[kind])
+		_free_main(main)
+
+	# seletor no topo: aparece no seu saque, fica na faixa que não aciona o botão de ação
+	main = _serve_setup(ServeType.Kind.UNDER, false)
+	game = main.get("game")
+	human = main.get("human")
+	var hud: Hud = main.get("hud")
+	main.call("_process", DT)
+	var box := hud.get("_serve_box") as HBoxContainer
+	var btns: Array[Button] = hud.get("_serve_btns")
+	var r := box.get_global_rect()
+	var lvl := (hud.get("_level_btn") as Button).get_global_rect()
+	_check(box.visible and r.end.y <= TouchControls.TOP_BAR and r.size.x > 300.0 and not r.intersects(lvl),
+			"seletor de saque visível no topo, fora da área do botão de ação (%s)" % r)
+	btns[ServeType.Kind.FLOAT].pressed.emit()
+	_check(game.serve_type[human.team] == ServeType.Kind.FLOAT, "tocar em FLUTUANTE troca o seu tipo de saque")
+	game.human_press(human)
+	main.call("_process", DT)
+	_check(not box.visible and game.state == Game.State.SERVE_TOSS, "apertar lança a bola e esconde o seletor")
+	_free_main(main)
+
+	var path := "user://test_serve.cfg"
+	var sv := SaveData.new(path)
+	sv.serve_type = ServeType.Kind.JUMP
+	sv.save_file()
+	var back := SaveData.new(path)
+	back.load_file()
+	var v1 := ConfigFile.new()
+	v1.set_value("meta", "version", 1)
+	v1.set_value("options", "aim_sens", 1.2)
+	v1.save(path)
+	var old := SaveData.new(path)
+	old.load_file()
+	_check(back.serve_type == ServeType.Kind.JUMP and old.serve_type == ServeType.Kind.UNDER
+			and MatchConfig.from_save(back, 0).serve_type == ServeType.Kind.JUMP,
+			"tipo de saque salvo e recarregado; save versão 1 usa POR BAIXO")
+	DirAccess.remove_absolute(path)
+
+
+func _test_float_physics() -> void:
+	# 1) preditor (passo 1/120) = bola real (passo 1/60) com oscilação
+	var b := BallSim.new()
+	b.pos = Vector3(1.0, 2.45, 7.6)
+	b.vel = BallSim.clear_net_velocity(b.pos, Vector3(-1.0, Tuning.BALL_RADIUS, -5.0), 1.3)
+	b.set_wobble(0.7, Tuning.FLOAT_FREQ, 0.9)
+	var pred := b.predict()
+	var real := b.copy()
+	var plain := b.copy()
+	plain.wobble_amp = 0.0
+	var max_dx := 0.0
+	while not real.landed:
+		real.advance(DT)
+		plain.advance(DT)
+		max_dx = maxf(max_dx, absf(real.pos.x - plain.pos.x))
+	var land: Vector3 = pred["land"]
+	_check(land.distance_to(real.pos) < 0.001, "flutuante: preditor = bola real (erro %.5f m)" % land.distance_to(real.pos))
+	_check(max_dx > 0.2, "flutuante: a bola oscila de lado no caminho (%.2f m)" % max_dx)
+
+	# 2) a oscilação muda o caminho, não o destino
+	var main := _serve_setup(ServeType.Kind.FLOAT, true)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var worst := 0.0
+	for i in 12:
+		game.rng.seed = 40 + i
+		var aim := Vector3(-2.6 + 0.47 * i, 0.0, -5.5 + 0.35 * i)
+		var shot := game.resolver.serve(game, human, ServeType.Kind.FLOAT, Vector3(0.6, 2.45, 7.6), aim, 1.0)
+		var sim := BallSim.new()
+		sim.pos = shot.from
+		sim.vel = shot.vel
+		sim.g = shot.grav
+		sim.set_wobble(shot.wobble_amp, Tuning.FLOAT_FREQ, shot.wobble_phase)
+		var p2 := sim.predict()
+		var hit: Vector3 = p2["land"]
+		worst = maxf(worst, Vector2(hit.x - shot.target.x, hit.z - shot.target.z).length())
+	_check(worst < 0.001, "flutuante cai no ponto mirado (pior erro %.5f m)" % worst)
+
+	# 3) leitura atrasada: anel do recebedor na trajetória "sem efeito" até FLOAT_REVEAL
+	game.rng.seed = 5
+	_release_at(game, human, 0.0)
+	var plan: ContactPlan = game.plan
+	var ok_plan := plan != null and plan.act == Game.Act.RECEIVE
+	var gap := plan.display_pos.distance_to(plan.pos) if ok_plan else 0.0
+	_check(ok_plan and gap > 0.05, "flutuante: anel mostrado ≠ contato real antes da revelação (%.2f m)" % gap)
+	var before_ok := ok_plan and game.plan_view_pos(plan).is_equal_approx(plan.display_pos)
+	while ok_plan and game.time < plan.t - Tuning.FLOAT_REVEAL + Tuning.FLOAT_SLIDE + DT:
+		game.tick(DT)
+		if game.plan != plan:
+			break
+	_check(before_ok and game.plan == plan and game.plan_view_pos(plan).is_equal_approx(plan.pos),
+			"anel desliza para a posição certa nos últimos %.2f s" % Tuning.FLOAT_REVEAL)
+	_free_main(main)
+
+	# 4) antena: o x oscilando é que leva a bola para fora
+	for amp: float in [0.0, 0.7]:
+		var a := BallSim.new()
+		a.pos = Vector3(3.3, 2.6, 4.0)
+		a.vel = BallSim.clear_net_velocity(a.pos, Vector3(3.3, Tuning.BALL_RADIUS, -4.0), 1.0)
+		var t_net := -a.pos.z / a.vel.z
+		a.set_wobble(amp, Tuning.FLOAT_FREQ, PI * 0.5 - Tuning.FLOAT_FREQ * t_net)
+		var seen := -1
+		while not a.landed and seen < 0:
+			for e in a.advance(DT):
+				if int(e["type"]) == BallSim.Ev.ANTENNA or int(e["type"]) == BallSim.Ev.CROSS:
+					seen = int(e["type"])
+		if amp == 0.0:
+			_check(seen == BallSim.Ev.CROSS, "sem oscilação a bola passa dentro da antena")
+		else:
+			_check(seen == BallSim.Ev.ANTENNA, "com oscilação a mesma bola sai pela antena")
+
+
+## Bola no ponto de ataque do bot (2,5 m da rede), plano ATTACK dele, você em `human_at`.
+## Sem cérebro de bot: o teste decide tudo.
+func _attack_setup(game: Game, foe: Player, human: Player, human_at: Vector3) -> void:
+	game.bots.clear()
+	game.state = Game.State.PLAY
+	game.rally_over = false
+	human.reset_state()
+	human.position = human_at
+	var at := Vector3(0.0, Tuning.H_ATTACK, -2.5)
+	foe.reset_state()
+	foe.position = Vector3(at.x, 0.0, at.z)
+	game.ball.launch(at, Vector3.ZERO)
+	game.last_team = foe.team
+	game.touches = 2
+	game.plan = ContactPlan.new(foe.team, 3, Game.Act.ATTACK, game.time, at, foe)
+	game._update_block_plan()
+
+
+## Instante (relógio do Game) em que a bola chega ao plano das mãos de quem defende o lado +z.
+func _time_at_block_plane(game: Game) -> float:
+	var pred := game.ball.sim.predict()
+	var pts: PackedVector3Array = pred["points"]
+	var times: PackedFloat64Array = pred["times"]
+	for i in range(1, pts.size()):
+		var z0 := pts[i - 1].z + Tuning.BLOCK_DEPTH
+		var z1 := pts[i].z + Tuning.BLOCK_DEPTH
+		if z0 < 0.0 and z1 >= 0.0:
+			return game.time + lerpf(times[i - 1], times[i], -z0 / (z1 - z0))
+	return INF
+
+
+func _test_block() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var foe: Player = main.get("foe")
+	_attack_setup(game, foe, human, Vector3(0.0, 0.0, 3.0))
+	_check(game.current_act(human) == Game.Act.NONE, "longe da rede: sem bloqueio")
+	_attack_setup(game, foe, human, Vector3(0.0, 0.0, 0.8))
+	_check(game.current_act(human) == Game.Act.BLOCK and game.action_label(human) == "BLOQUEAR",
+			"perto da rede com o ataque vindo: o botão vira BLOQUEAR")
+
+	# pula antes do ataque: o preditor já sabe que a cortada para nas mãos
+	game.human_press(human)
+	game.human_release(human)
+	_check(not human.is_grounded() and game.blocks.size() == 1, "soltar BLOQUEAR pula")
+	for _i in int(0.25 / DT):
+		game.tick(DT)
+	game._execute(foe, Vector3(0.0, 0.0, 5.0), 0.0, 1.0)
+	_check(bool(game.ball.sim.predict()["blocked"]) and game.plan == null,
+			"cortada no bloqueio: o preditor mostra a bola parando nas mãos")
+	var hit := [""]
+	game.touch_made.connect(func(p: Player, grade: String, _q: float) -> void:
+		if p == human:
+			hit[0] = grade)
+	for _i in int(0.5 / DT):
+		game.tick(DT)
+	_check(hit[0] != "" and game.last_team == human.team, "a bola bate nas mãos (%s)" % hit[0])
+
+	# graus pelo erro do pico (bloqueio colocado direto, sem esperar o pulo)
+	var expect := {0.0: "PERFEITO!", 0.12: "BOM", -0.22: "CEDO"}
+	for e: float in expect:
+		_attack_setup(game, foe, human, Vector3(0.0, 0.0, 0.6))
+		game._execute(foe, Vector3(0.0, 0.0, 5.0), 0.0, 1.0)
+		var t_hit := _time_at_block_plane(game)
+		var bk := Block.new(human, t_hit + e - Tuning.JUMP_TIME_UP, Tuning.JUMP_HEIGHT)
+		game.blocks.append(bk)
+		game.ball.sim.blocks.append(bk)
+		hit[0] = ""
+		var landed_z := 0.0
+		for _i in int(0.3 / DT):
+			game.tick(DT)
+			if hit[0] != "":
+				break
+		var target := game.ball.sim.copy().predict()["land"] as Vector3
+		landed_z = target.z
+		var ok: bool = hit[0] == expect[e] and game.last_team == human.team and game.touches == 0
+		if e == 0.0:
+			ok = ok and landed_z < 0.0
+		elif e == 0.12:
+			ok = ok and landed_z > 0.0 and game.plan != null and game.plan.player == human \
+					and game.plan.act == Game.Act.RECEIVE and game.plan.n == 1
+		else:
+			ok = ok and absf(target.x) > Tuning.COURT_HALF_W
+		_check(ok, "pico %+.2f s: %s, bloqueio não conta toque (%s, cai em %s)" % [e, expect[e], hit[0], target])
+
+	# cortada mirada longe das mãos passa
+	_attack_setup(game, foe, human, Vector3(-1.5, 0.0, 0.6))
+	var away := Block.new(human, game.time - Tuning.JUMP_TIME_UP + 0.1, Tuning.JUMP_HEIGHT)
+	game.blocks.append(away)
+	game._execute(foe, Vector3(2.5, 0.0, 5.0), 0.0, 1.0)
+	_check(not bool(game.ball.sim.predict()["blocked"]), "cortada na diagonal, longe das mãos, passa")
+	_free_main(main)
+
+
+func _test_dink() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var foe: Player = main.get("foe")
+	game.bots.clear()
+	game.state = Game.State.PLAY
+	var at := Vector3(0.0, Tuning.H_ATTACK, 2.0)
+	human.position = Vector3(at.x, 0.0, at.z)
+	game.plan = ContactPlan.new(human.team, 3, Game.Act.ATTACK, game.time, at, human)
+	game.human_aim = _zone_pos(game, human, "CURTA ESQ")
+	_check(game.current_act(human) == Game.Act.DINK and game.action_label(human) == "LARGAR",
+			"mira na zona curta: o botão diz LARGAR")
+	game.human_aim = _zone_pos(game, human, "FUNDO")
+	_check(game.current_act(human) == Game.Act.ATTACK, "mira no fundo: continua ATACAR")
+
+	# largada do bot passa por cima de um bloqueio perfeito seu
+	_attack_setup(game, foe, human, Vector3(0.0, 0.0, 0.6))
+	var used := [0]
+	game.action_used.connect(func(_p: Player, act: int) -> void:
+		if act == Game.Act.DINK:
+			used[0] += 1)
+	game._execute(foe, Vector3(0.0, 0.0, 1.8), 0.0, 1.0)
+	var t_plane := _time_at_block_plane(game)
+	var bk := Block.new(human, t_plane - Tuning.JUMP_TIME_UP, Tuning.JUMP_HEIGHT)
+	game.blocks.append(bk)
+	game.ball.sim.blocks.append(bk)
+	var pred := game.ball.sim.predict()
+	var land: Vector3 = pred["land"]
+	_check(used[0] == 1 and game.last_kind == Game.Act.DINK, "bot mirando a 1,8 m da rede larga")
+	_check(not bool(pred["blocked"]) and land.z > 0.0 and Game.is_inside(land),
+			"largada passa por cima do bloqueio perfeito e cai dentro (%s)" % land)
+	_free_main(main)
+
+
+## Bola sua no contato, a `gap` m de você, com a ação `act`. Executa o toque (soltou no tempo).
+func _touch_at_gap(game: Game, human: Player, act: int, gap: float) -> Dictionary:
+	game.bots.clear()
+	game.state = Game.State.PLAY
+	game.rally_over = false
+	human.reset_state()
+	human.position = Vector3(0.0, 0.0, 4.0)
+	var h := Tuning.H_ATTACK if act == Game.Act.ATTACK else Tuning.H_RECEIVE
+	var at := Vector3(gap, h, 4.0)
+	game.ball.launch(at, Vector3.ZERO)
+	game.last_team = 1
+	game.touches = 1
+	game.plan = ContactPlan.new(human.team, 1, act, game.time, at, human)
+	var got := {"q": -1.0, "why": "", "dive": false}
+	var on_touch := func(_p: Player, _g: String, q: float) -> void: got["q"] = q
+	var on_whiff := func(_p: Player, why: String) -> void: got["why"] = why
+	var on_used := func(_p: Player, a: int) -> void: got["dive"] = got["dive"] or a == Game.Act.DIVE
+	game.touch_made.connect(on_touch)
+	game.whiffed.connect(on_whiff)
+	game.action_used.connect(on_used)
+	var aim := Vector3(0.0, 0.0, -5.0) if act == Game.Act.ATTACK else Vector3(0.8, 0.0, 1.6)
+	game._execute(human, aim, 0.0, 1.0)
+	game.touch_made.disconnect(on_touch)
+	game.whiffed.disconnect(on_whiff)
+	game.action_used.disconnect(on_used)
+	return got
+
+
+func _test_dive() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	game.bots.clear()
+	game.state = Game.State.PLAY
+	human.position = Vector3(0.0, 0.0, 4.0)
+	game.plan = ContactPlan.new(human.team, 1, Game.Act.RECEIVE, game.time + 0.4,
+			Vector3(2.0, Tuning.H_RECEIVE, 4.0), human)
+	_check(game.action_label(human) == "PEIXINHO", "parado a 2 m do anel: o botão avisa PEIXINHO")
+	human.position = Vector3(1.0, 0.0, 4.0)
+	_check(game.action_label(human) == "RECEBER", "dentro do alcance: continua RECEBER")
+
+	var got := _touch_at_gap(game, human, Game.Act.RECEIVE, 2.0)
+	_check(bool(got["dive"]) and float(got["q"]) > 0.0 and float(got["q"]) <= Tuning.DIVE_Q_MAX,
+			"bola a 2,0 m: peixinho alcança com qualidade ≤ %.1f (q=%.2f)" % [Tuning.DIVE_Q_MAX, got["q"]])
+	for _i in int(0.3 / DT):
+		human.step(DT)
+	var lying := human.position
+	human.move_input = Vector2(-1.0, 0.0)
+	for _i in int((Tuning.DIVE_RECOVER - 0.35) / DT):
+		human.step(DT)
+	_check(human.is_diving() and human.position.is_equal_approx(lying), "no chão o joystick não move")
+	for _i in int(0.4 / DT):
+		human.step(DT)
+	_check(not human.is_diving() and human.position.x < lying.x - 0.1, "depois de DIVE_RECOVER volta a andar")
+	human.move_input = Vector2.ZERO
+
+	got = _touch_at_gap(game, human, Game.Act.RECEIVE, 3.0)
+	_check(str(got["why"]) == "LONGE" and not bool(got["dive"]), "bola a 3,0 m: LONGE")
+	got = _touch_at_gap(game, human, Game.Act.ATTACK, 2.0)
+	_check(str(got["why"]) == "LONGE" and not bool(got["dive"]), "ataque nunca vira peixinho")
+	human.can_dive = false
+	got = _touch_at_gap(game, human, Game.Act.RECEIVE, 2.0)
+	_check(str(got["why"]) == "LONGE", "sem peixinho (bot no Fácil): LONGE")
+	_free_main(main)
+
+
+func _test_stamina() -> void:
+	var main := _make_main(false)
+	var game: Game = main.get("game")
+	var human: Player = main.get("human")
+	var foe: Player = main.get("foe")
+	_check(not Tuning.STAMINA_ENABLED and not game.stamina_on and not human.stamina_on,
+			"stamina desligada por padrão (DP-03)")
+	_touch_at_gap(game, human, Game.Act.ATTACK, 0.5)
+	_touch_at_gap(game, human, Game.Act.RECEIVE, 2.0)
+	_check(human.stamina == 1.0 and not human.is_tired() and is_equal_approx(human.jump_height(), Tuning.JUMP_HEIGHT),
+			"desligada: cortada e peixinho não gastam nada")
+
+	game.set_stamina(true)
+	_touch_at_gap(game, human, Game.Act.ATTACK, 0.5)
+	_check(is_equal_approx(human.stamina, 1.0 - Tuning.STAMINA_COST_ATTACK), "cortada perfeita gasta %.2f" % Tuning.STAMINA_COST_ATTACK)
+	_touch_at_gap(game, human, Game.Act.RECEIVE, 2.0)
+	_check(is_equal_approx(human.stamina, 1.0 - Tuning.STAMINA_COST_ATTACK - Tuning.STAMINA_COST_DIVE),
+			"peixinho gasta %.2f" % Tuning.STAMINA_COST_DIVE)
+	human.stamina = 0.2
+	_check(human.is_tired() and is_equal_approx(human.jump_height(), Tuning.JUMP_HEIGHT * Tuning.TIRED_JUMP),
+			"abaixo de %.1f: cansado, pula menos" % Tuning.STAMINA_TIRED)
+	# cansado corre menos: mesma entrada por 1 s
+	human.reset_state()
+	human.position = Vector3(0.0, 0.0, 4.0)
+	human.move_input = Vector2(1.0, 0.0)
+	for _i in int(1.0 / DT):
+		human.step(DT)
+	var tired_x := human.position.x
+	human.stamina = 1.0
+	human.reset_state()
+	human.position = Vector3(-3.0, 0.0, 4.0)
+	human.move_input = Vector2(1.0, 0.0)
+	for _i in int(1.0 / DT):
+		human.step(DT)
+	human.move_input = Vector2.ZERO
+	_check(tired_x < (human.position.x + 3.0) * 0.9, "cansado anda mais devagar (%.2f × %.2f m)" % [tired_x, human.position.x + 3.0])
+	# cansado corta mais devagar
+	var speeds := []
+	for st: float in [1.0, 0.1]:
+		human.stamina = st
+		_touch_at_gap(game, human, Game.Act.ATTACK, 0.5)
+		speeds.append(Vector2(game.ball.sim.vel.x, game.ball.sim.vel.z).length())
+	_check(speeds[1] < speeds[0], "cansado corta mais devagar (%.1f × %.1f m/s)" % speeds)
+	# recupera: com a bola em jogo e a cada ponto
+	human.stamina = 0.2
+	game.state = Game.State.PLAY
+	game.ball.launch(Vector3(0.0, 9.0, 3.0), Vector3(0.0, 0.0, 0.0))
+	for _i in int(1.0 / DT):
+		game.tick(DT)
+	var after_play := human.stamina
+	game._award(foe.team, "Teste")
+	_check(after_play > 0.2 + Tuning.STAMINA_REGEN * 0.9 and
+			is_equal_approx(human.stamina, minf(after_play + Tuning.STAMINA_POINT_BONUS, 1.0)),
+			"recupera em jogo e a cada ponto (%.2f → %.2f)" % [after_play, human.stamina])
 	_free_main(main)
 
 
@@ -585,7 +1122,7 @@ func _test_left_handed() -> void:
 ## mirando em `serve_at`. Devolve o novo estado de "apertado".
 func _script_human(game: Game, human: Player, pressed: bool, serve: bool, serve_at: Vector3) -> bool:
 	human.move_input = Vector2.ZERO
-	var act := game.current_act(human)
+	var act := _phase1_act(game, human)
 	if act == Game.Act.SERVE:
 		if not serve:
 			return pressed
@@ -611,6 +1148,12 @@ func _script_human(game: Game, human: Player, pressed: bool, serve: bool, serve_
 	if pressed:
 		game.human_release(human)
 	return false
+
+
+## Os roteiros de humano da Fase 1 não bloqueiam: os números das simulações continuam comparáveis.
+func _phase1_act(game: Game, human: Player) -> int:
+	var act := game.current_act(human)
+	return Game.Act.NONE if act == Game.Act.BLOCK else act
 
 
 func _zone_pos(game: Game, human: Player, zone: String) -> Vector3:
@@ -725,7 +1268,7 @@ func _test_match_duration() -> void:
 		var t0 := game.time
 		while game.state != Game.State.MATCH_OVER and game.time - t0 < 3600.0:
 			human.move_input = Vector2.ZERO
-			var act := game.current_act(human)
+			var act := _phase1_act(game, human)
 			if act == Game.Act.SERVE:
 				st["serve_t"] = float(st["serve_t"]) + DT
 				if not st["pressed"] and float(st["serve_t"]) > 0.8:

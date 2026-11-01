@@ -9,6 +9,9 @@ var act: int            # Game.Act
 var t: float            # tempo ideal no relógio de Game.time
 var pos: Vector3        # centro da bola no contato
 var player: Player
+## Posição que a tela (e o bot) mostra antes da revelação: no flutuante, a trajetória
+## "sem efeito"; nas outras bolas, igual a `pos`. Ver Game.plan_view_pos().
+var display_pos: Vector3
 
 
 func _init(p_team: int, p_n: int, p_act: int, p_t: float, p_pos: Vector3, p_player: Player) -> void:
@@ -18,3 +21,4 @@ func _init(p_team: int, p_n: int, p_act: int, p_t: float, p_pos: Vector3, p_play
 	t = p_t
 	pos = p_pos
 	player = p_player
+	display_pos = p_pos

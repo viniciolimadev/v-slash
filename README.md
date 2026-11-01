@@ -1,7 +1,8 @@
-# Vôlei Mobile — Fase 1
+# Vôlei Mobile — Fase 2
 
 Vôlei 1v1 contra bot: **bola cinemática + anel de timing + gesto segura → mira → solta**.
 Partida em **melhor de 3 sets de 15** (vantagem de 2), com título, escolha do bot, tutorial, pausa, opções e resultado; progresso salvo no aparelho.
+Fase 2: saque **por baixo / flutuante / viagem**, **bloqueio**, **largada**, **peixinho** e stamina (experimento, desligada).
 Tudo é gerado por código (formas simples). Godot **4.7**, renderizador Compatibility (Android/iOS/Web).
 
 ## Abrir e jogar
@@ -14,6 +15,7 @@ Tudo é gerado por código (formas simples). Godot **4.7**, renderizador Compati
 |---|---|---|
 | Andar | polegar esquerdo (o joystick nasce onde você encosta) | WASD / setas |
 | Tocar na bola | segure na metade direita → arraste para mirar → **solte** | segure **Espaço** (mira padrão) ou clique-segure-arraste na direita |
+| Tipo de saque | antes do seu saque: **POR BAIXO · FLUTUANTE · VIAGEM** no topo direito (fica salvo) | mouse |
 | Pausa | botão **II** ou voltar do Android (trocar de app também pausa) | mouse |
 
 ## O loop
@@ -24,8 +26,14 @@ Tudo é gerado por código (formas simples). Godot **4.7**, renderizador Compati
 | Anel branco fechando | solte quando encostar no colorido = **PERFEITO** (fica verde) |
 | Ponto branco | onde a bola cai se ninguém tocar (dá para deixar cair bola fora) |
 | Sombra preta | posição da bola no chão (noção de altura) |
-| Texto do botão | SACAR · RECEBER (1º) · LEVANTAR (2º) · ATACAR (3º, pulo automático) |
+| Texto do botão | SACAR · RECEBER (1º) · LEVANTAR (2º) · ATACAR (3º, pulo automático) · BLOQUEAR · LARGAR · PEIXINHO |
 | Levantamento | a mira gruda em **ALTA** (padrão), **PONTA**, **RÁPIDA**, **PIPE** |
+| Saque flutuante/viagem | apertar **lança a bola**; o anel fecha embaixo de você: solte no anel. Bola lançada que cai = ponto do bot. Viagem: janela menor, mais forte, pode errar |
+| Flutuante recebido | a bola balança de lado; o anel e o ponto de queda só ficam certos perto do contato (deslizam) |
+| Anel roxo na rede | o bot vai atacar e você está perto da rede: **BLOQUEAR** pula; solte quando o anel fechar (pico na hora da cortada) |
+| Faixa escura no chão | enquanto você mira o ataque com o bot na rede: onde o bloqueio dele pega. Mire fora dela |
+| Mira nas zonas CURTA | **LARGAR**: bola curta (passa por cima do bloqueio se ele estiver na rede) |
+| Anel laranja / PEIXINHO | no seu ritmo você não chega: o toque vira peixinho sozinho (alcança, mas sai fraco e você fica no chão) |
 
 Timing ruim = bola menos precisa (e cortada mais fraca). Longe do anel = "LONGE", não toca.
 
@@ -45,15 +53,22 @@ Opções (título ou pausa): sensibilidade da mira, modo canhoto (joystick e bot
 | jogo lento/rápido | `GRAVITY`, `T_RECEIVE`, `T_SET_HIGH` |
 | bot forte/fraco | `BOT_SPEED`, `BOT_REACTION`, `BOT_POWER` |
 | partida longa/curta | `SET_POINTS`, `SETS_TO_WIN`, `WIN_BY`, `POINT_PAUSE` |
+| saque fácil/difícil | `SERVE_TIME`, `SERVE_WINDOW`, `SERVE_SCATTER`, `SERVE_Q_UNDER` |
+| flutuante balança demais / leitura cedo ou tarde | `FLOAT_AMP`, `FLOAT_FREQ`, `FLOAT_REVEAL`, `FLOAT_SLIDE` |
+| bloqueio fácil/difícil | `BLOCK_ZONE`, `BLOCK_HALF_W`, `BLOCK_REACH`, `BLOCK_T_DOWN` |
+| largada | `DINK_DIST`, `T_DINK`, `DINK_APEX_MARGIN`, `SCATTER_DINK` |
+| peixinho | `DIVE_REACH`, `DIVE_Q_MAX`, `DIVE_RECOVER` |
+| stamina (experimento) | `STAMINA_ENABLED` e os `STAMINA_*` / `TIRED_*` |
+| bot saca/bloqueia/larga mais ou menos | `BOT_SERVE_MIX`, `BOT_BLOCK_CHANCE`, `BOT_BLOCK_SIGMA`, `BOT_DINK_CHANCE` |
 
-Equilíbrio dos valores atuais (simulação de 20 min por linha, "humano" com reação e erro de timing):
+Equilíbrio dos valores atuais (`godot --headless --script res://tests/balance_sim.gd -- --matches=48`: 4 × 20 min por célula; "humano" roteirizado com reação e erro de timing, que não bloqueia; o "bom" ataca longe das mãos do bot quando ele está na rede):
 
 | Você | Fácil | Médio | Difícil |
 |---|---|---|---|
-| bom (reação 0,25 s, erro 50 ms) | 77% dos pontos | 52% | 20% |
-| casual (reação 0,4 s, erro 90 ms) | 54% | 33% | 13% |
+| bom (reação 0,25 s, erro 50 ms) | 74% dos pontos | 37% | 22% |
+| casual (reação 0,4 s, erro 90 ms) | 50% | 26% | 14% |
 
-Partida inteira (`_test_match_duration`, casual × Fácil, 8 partidas com sementes fixas): vence **3 de 8**, média **7,8 min** (2 sets ≈ 6–7 min; 3 sets ≈ 9–11 min).
+Partida inteira, casual × Fácil: 48 sementes → vence **46%**, média **8,8 min**; no CI (`_test_match_duration`, 8 sementes) vence 2 de 8, média 8,4 min.
 
 ## Testar no celular sem instalar nada (CI)
 
@@ -109,13 +124,17 @@ scripts/
   ui/screens/          título, escolha do bot, resultado, opções
   tutorial/            tutorial jogável
 tests/run_tests.gd     testes headless
+tests/balance_sim.gd   simulação de equilíbrio (tabela acima; fora do CI)
 docs/                  roadmap, SDDs, padrão de trabalho
 ```
 
 | Arquivo | Faz |
 |---|---|
-| `scripts/core/ball_sim.gd` | física exata da bola (parábola, rede, chão) + preditor |
-| `scripts/core/game.gd` | regras, plano de contato (quem/onde/quando), toque, pontos |
+| `scripts/core/ball_sim.gd` | física exata da bola (parábola, flutuante, bloqueio, rede, chão) + preditor |
+| `scripts/core/game.gd` | regras, plano de contato (quem/onde/quando), toque, saque, bloqueio, pontos |
+| `scripts/core/hit_resolver.gd` | para onde e como a bola sai de cada toque (saque, largada, bloqueio) |
+| `scripts/core/serve_type.gd` | tipos de saque |
+| `scripts/core/block.gd` | mãos do bloqueio (usadas pela física) |
 | `scripts/core/tuning.gd` | todos os números |
 | `scripts/ai/bot_brain.gd` | IA (usa o mesmo preditor) |
 | `scripts/entities/ball.gd` | visual da bola |
@@ -133,4 +152,4 @@ docs/                  roadmap, SDDs, padrão de trabalho
 
 ## Próximas fases
 
-Bloqueio, peixinho, stamina e tipos de saque → Fase 2 · 2v2 → Fase 3 · arte e som → Fase 4. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).
+2v2 → Fase 3 · arte e som → Fase 4. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).

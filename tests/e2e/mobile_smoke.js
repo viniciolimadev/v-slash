@@ -1,6 +1,6 @@
 // Teste de ponta a ponta no navegador, emulando um celular na horizontal com toque.
 // Abre a versão Web e percorre título → escolha do bot → tutorial (pular) → partida;
-// na partida arrasta o analógico, saca e confere (pelos pixels da tela) que o jogador
+// na partida arrasta o analógico, escolhe o saque flutuante, saca e confere (pelos pixels da tela) que o jogador
 // azul realmente se moveu; depois pausa e sai para o menu.
 // O jogo publica a tela atual e a posição dos botões em window.__vs (scripts/ui/e2e_hooks.gd).
 //
@@ -154,7 +154,11 @@ async function playerCenter(decoder, png) {
   const dx2 = p1 && p2 ? p2.x - p1.x : 0;
   check(dx2 < -15, `analógico para a esquerda move o jogador (${dx2.toFixed(0)} px)`);
 
-  // botão de ação: segura, arrasta a mira, solta (saque)
+  // seletor de saque (topo direito, só no seu saque): escolhe FLUTUANTE
+  await tap('hud/serve/1');
+  await shot('6a-saque-flutuante');
+
+  // botão de ação: segura (lança a bola), arrasta a mira, solta (saque)
   const bx = W * 0.85, by = H * 0.75;
   await touch('touchStart', [[bx, by, 1]]);
   await page.waitForTimeout(300);

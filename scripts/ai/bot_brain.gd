@@ -2,6 +2,8 @@ class_name BotBrain
 extends RefCounted
 ## IA simples: lê o MESMO plano de contato que desenha o seu anel,
 ## com atraso de reação e erro de timing conforme o nível.
+## Fase 2: escolhe o tipo de saque, sobe para bloquear, larga e (Médio+) faz peixinho,
+## sempre pelos mesmos caminhos do humano (start_serve, attempt_hit).
 
 var p: Player
 var game: Game
@@ -13,6 +15,11 @@ var _react_until := 0.0
 var _hit_at := INF
 var _will_play := true
 var _serve_at := INF
+var _toss_hit_at := INF             # saque com lançamento: quando soltar
+var _foe_seen := -1                 # plano do adversário em que já decidiu se vai bloquear
+var _will_block := false
+var _block_err := 0.0
+var _block_err_set := false
 
 
 func _init(player: Player, g: Game, lvl: int) -> void:
@@ -25,6 +32,7 @@ func _init(player: Player, g: Game, lvl: int) -> void:
 func set_level(lvl: int) -> void:
 	level = clampi(lvl, 0, 2)
 	p.speed = float(Tuning.BOT_SPEED[level])
+	p.can_dive = level >= 1             # o Fácil não faz peixinho
 
 
 func tick(_dt: float) -> void:
@@ -32,16 +40,24 @@ func tick(_dt: float) -> void:
 	var s := Game.side_of_team(p.team)
 	var home := Vector3(0.0, 0.0, s * 4.2)
 
-	if game.state == Game.State.SERVE_WAIT:
+	if game.state == Game.State.SERVE_WAIT or game.state == Game.State.SERVE_TOSS:
 		p.holding = false
 		if game.server != p:
 			_go_to(home)
+			return
+		if game.state == Game.State.SERVE_TOSS:
+			_toss_tick()
 			return
 		if _serve_at == INF:
 			_serve_at = game.time + rng.randf_range(0.8, 1.4)
 		if game.time >= _serve_at:
 			_serve_at = INF
-			game.attempt_hit(p, _serve_target())
+			game.serve_type[p.team] = _pick_serve()
+			if ServeType.is_tossed(game.serve_type[p.team]):
+				game.start_serve(p)
+				_toss_hit_at = INF
+			else:
+				game.attempt_hit(p, _serve_target())
 		return
 	_serve_at = INF
 
@@ -51,8 +67,10 @@ func tick(_dt: float) -> void:
 	var plan := game.plan
 	if plan == null or plan.player != p:
 		p.holding = false
-		_go_to(home)
+		if not _block_tick(plan):
+			_go_to(home)
 		return
+	_will_block = false
 
 	if game.plan_id != _plan_seen:
 		# bola nova: decide uma vez (reação, erro de timing, deixar cair se for fora)
@@ -71,13 +89,67 @@ func tick(_dt: float) -> void:
 		p.holding = false
 		_go_to(home)
 		return
-	var target := plan.pos
-	_go_to(target)
+	# mesma leitura do humano: no flutuante, a posição certa só perto do contato
+	_go_to(game.plan_view_pos(plan))
 	var act := plan.act
 	p.holding = act == Game.Act.ATTACK
 	if game.time >= _hit_at:
 		_hit_at = INF
 		game.attempt_hit(p, _choose_aim(act), float(Tuning.BOT_POWER[level]))
+
+
+## Bola lançada no seu saque: segura (a viagem pula sozinha) e solta com o erro do nível.
+func _toss_tick() -> void:
+	var plan := game.plan
+	if plan == null or plan.player != p:
+		return
+	p.holding = true
+	if _toss_hit_at == INF:
+		var err := rng.randfn(0.0, float(Tuning.BOT_TIMING_SIGMA[level]))
+		_toss_hit_at = plan.t + clampf(err, -0.3, 0.13)
+	if game.time >= _toss_hit_at:
+		_toss_hit_at = -INF             # já soltou (não tenta de novo nesta bola)
+		game.attempt_hit(p, _serve_target())
+
+
+func _pick_serve() -> int:
+	var mix: Array = Tuning.BOT_SERVE_MIX[level]
+	var r := rng.randf()
+	for kind in mix.size():
+		r -= float(mix[kind])
+		if r < 0.0:
+			return kind
+	return ServeType.Kind.UNDER
+
+
+## Bloqueio: quando o adversário vai levantar/atacar, decide uma vez se sobe para a rede;
+## lá, solta BLOQUEAR com erro de timing do nível. true = está cuidando disso.
+func _block_tick(plan: ContactPlan) -> bool:
+	var s := Game.side_of_team(p.team)
+	if game.current_act(p) == Game.Act.BLOCK:
+		var bp := game.block_plan
+		_go_to(Vector3(bp.pos.x, 0.0, s * 0.6))
+		if not _block_err_set:
+			_block_err_set = true
+			_block_err = rng.randfn(0.0, float(Tuning.BOT_BLOCK_SIGMA[level]))
+		if game.time >= game.block_release_t() + _block_err:
+			game.attempt_hit(p, p.position)
+			_will_block = false
+		return true
+	if plan == null or plan.team == p.team or not p.is_grounded():
+		return false
+	if plan.act != Game.Act.SET_BALL and plan.act != Game.Act.ATTACK:
+		return false
+	if plan.n == 2 and game.plan_id != _foe_seen:
+		_foe_seen = game.plan_id
+		_will_block = rng.randf() < float(Tuning.BOT_BLOCK_CHANCE[level])
+		_block_err_set = false
+	if not _will_block:
+		return false
+	# antes do levantamento, espera no meio da rede; depois, na frente do atacante
+	var x := plan.pos.x if plan.act == Game.Act.ATTACK else 0.0
+	_go_to(Vector3(x, 0.0, s * 0.6))
+	return true
 
 
 func _go_to(target: Vector3) -> void:
@@ -89,7 +161,7 @@ func _go_to(target: Vector3) -> void:
 
 
 func _clearly_out() -> bool:
-	var lp := game.land_point
+	var lp := game.land_view()
 	return absf(lp.x) > Tuning.COURT_HALF_W + 0.3 or absf(lp.z) > Tuning.COURT_DEPTH + 0.3
 
 
@@ -99,7 +171,44 @@ func _choose_aim(act: int) -> Vector3:
 		return Vector3(Tuning.SETTER_SPOT.x * s, 0.0, Tuning.SETTER_SPOT.y * s) + _noise(0.3)
 	if act == Game.Act.SET_BALL:
 		return game.default_aim(p) + _noise(0.2)
+	if act == Game.Act.ATTACK:
+		return _attack_target()
 	return _court_target(1.2)
+
+
+## Cortada fora da faixa da largada (senão vira largada sem querer). Médio/Difícil às vezes largam;
+## o Difícil larga mais quando você está no bloqueio e, se cortar, corta longe das suas mãos.
+func _attack_target() -> Vector3:
+	var foe := game.opponent_of(p.team)
+	var foe_blocks := foe != null and absf(foe.position.z) <= Tuning.BLOCK_ZONE
+	var foe_side := -Game.side_of_team(p.team)
+	var dink_chance := float(Tuning.BOT_DINK_CHANCE[level])
+	if level == 2 and not foe_blocks:
+		dink_chance *= 0.4
+	if rng.randf() < dink_chance:
+		var w := Tuning.COURT_HALF_W - 0.8
+		return Vector3(rng.randf_range(-w, w), 0.0, foe_side * rng.randf_range(1.4, 2.0))
+	if level == 2 and foe_blocks:
+		return _away_from_block(foe)
+	return _court_target(Tuning.DINK_DIST + 0.3)
+
+
+func _away_from_block(foe: Player) -> Vector3:
+	var foe_side := -Game.side_of_team(p.team)
+	var w := Tuning.COURT_HALF_W - 0.6
+	var d := Tuning.COURT_DEPTH - 0.6
+	var from := game.plan.pos if game.plan != null else p.position
+	var best := Vector3(0.0, 0.0, foe_side * d * 0.6)
+	var best_gap := -INF
+	for _i in 8:
+		var c := Vector3(rng.randf_range(-w, w), 0.0, foe_side * rng.randf_range(Tuning.DINK_DIST + 0.3, d))
+		# x onde a cortada cruza a rede (linha reta do ponto de ataque até o alvo)
+		var k := -from.z / (c.z - from.z)
+		var gap := absf(lerpf(from.x, c.x, k) - foe.position.x)
+		if gap > best_gap:
+			best_gap = gap
+			best = c
+	return best
 
 
 ## Ponto na quadra adversária. Fácil: perto de você. Médio: aleatório. Difícil: longe de você.

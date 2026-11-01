@@ -3,14 +3,24 @@ extends RefCounted
 ## Física determinística da bola: parábola exata + rede + chão.
 ## A bola real e o preditor (anel, ponto de queda, bot) usam a MESMA função,
 ## então o marcador mostra exatamente onde a bola vai estar.
+## Saque flutuante: oscilação lateral analítica em x (wobble), somada à parábola.
+## Bloqueio: as mãos (Block) são conhecidas desde o começo do pulo; bater nelas para a bola
+## (evento BLOCK) e o Game decide a saída, como faz com o ponto.
 
-enum Ev { CROSS, NET, ANTENNA, LAND }
+enum Ev { CROSS, NET, ANTENNA, LAND, BLOCK }
 
 var pos := Vector3.ZERO
 var vel := Vector3.ZERO
 var g := Tuning.GRAVITY             # gravidade deste voo (a cortada usa mais: efeito topspin)
 var landed := false
 var net_hits := 0
+var age := 0.0                      # s desde o lançamento
+var wobble_amp := 0.0               # m (0 = bola normal)
+var wobble_freq := 0.0              # rad/s
+var wobble_phase := 0.0
+var clock := 0.0                    # relógio do Game (os bloqueios são marcados nele)
+var blocks: Array[Block] = []
+var stopped := false                # parada nas mãos do bloqueio, esperando o Game relançar
 
 
 func copy() -> BallSim:
@@ -20,7 +30,34 @@ func copy() -> BallSim:
 	b.g = g
 	b.landed = landed
 	b.net_hits = net_hits
+	b.age = age
+	b.wobble_amp = wobble_amp
+	b.wobble_freq = wobble_freq
+	b.wobble_phase = wobble_phase
+	b.clock = clock
+	b.blocks = blocks.duplicate()
+	b.stopped = stopped
 	return b
+
+
+func set_wobble(amp: float, freq: float, phase: float) -> void:
+	wobble_amp = amp
+	wobble_freq = freq
+	wobble_phase = phase
+
+
+## Deslocamento em x que a oscilação causa entre o lançamento e o instante t.
+static func wobble_offset(amp: float, freq: float, phase: float, t: float) -> float:
+	return amp * (sin(freq * t + phase) - sin(phase))
+
+
+## Tempo de voo de p0 até o centro da bola chegar ao chão (sem rede).
+static func flight_time(p0: Vector3, v0: Vector3, grav: float = Tuning.GRAVITY) -> float:
+	var b := BallSim.new()
+	b.pos = p0
+	b.vel = v0
+	b.g = grav
+	return b._time_to_height(Tuning.BALL_RADIUS)
 
 
 ## Velocidade inicial para sair de p0 e passar por p1 depois de t segundos.
@@ -36,9 +73,14 @@ static func pos_at(p0: Vector3, v0: Vector3, t: float, grav: float = Tuning.GRAV
 
 ## Altura do centro da bola ao cruzar o plano da rede (INF se não cruza).
 static func height_at_net(p0: Vector3, v0: Vector3, grav: float = Tuning.GRAVITY) -> float:
+	return height_at_z(p0, v0, 0.0, grav)
+
+
+## Altura do centro da bola ao cruzar o plano z (INF se não cruza).
+static func height_at_z(p0: Vector3, v0: Vector3, z: float, grav: float = Tuning.GRAVITY) -> float:
 	if absf(v0.z) < 1e-6:
 		return INF
-	var t := -p0.z / v0.z
+	var t := (z - p0.z) / v0.z
 	if t <= 0.0:
 		return INF
 	return pos_at(p0, v0, t, grav).y
@@ -60,12 +102,13 @@ static func clear_net_velocity(from: Vector3, to: Vector3, t0: float, grav: floa
 	return v
 
 
-## Avança dt segundos. Retorna os eventos em ordem: [{"type": Ev, "pos": Vector3}].
+## Avança dt segundos. Retorna os eventos em ordem: [{"type": Ev, "pos": Vector3}]
+## (o BLOCK traz também "block": Block).
 func advance(dt: float) -> Array:
 	var events: Array = []
 	var remaining := dt
 	var guard := 0
-	while remaining > 1e-9 and not landed and guard < 8:
+	while remaining > 1e-9 and not landed and not stopped and guard < 8:
 		guard += 1
 		var t_cross := INF
 		if absf(vel.z) > 1e-6:
@@ -75,8 +118,25 @@ func advance(dt: float) -> Array:
 		var t_floor := _time_to_height(Tuning.BALL_RADIUS)
 		if t_floor > remaining:
 			t_floor = INF
-		if t_cross == INF and t_floor == INF:
+		var t_block := INF
+		var hit_block: Block = null
+		for bk in blocks:
+			if vel.z * bk.side <= 0.0:
+				continue            # só a bola indo para o lado do bloqueador
+			var tb := (bk.plane_z() - pos.z) / vel.z
+			if tb < 0.0 or tb > remaining or tb >= t_block:
+				continue
+			if bk.catches(pos_after(tb), clock + tb):
+				t_block = tb
+				hit_block = bk
+		if t_cross == INF and t_floor == INF and t_block == INF:
 			_move(remaining)
+			break
+		if t_block <= t_cross and t_block < t_floor:
+			_move(t_block)
+			vel = Vector3.ZERO
+			stopped = true
+			events.append({"type": Ev.BLOCK, "pos": pos, "block": hit_block})
 			break
 		if t_floor <= t_cross:
 			_move(t_floor)
@@ -93,6 +153,7 @@ func advance(dt: float) -> Array:
 			var from_side := -signf(vel.z)
 			pos.z = from_side * (Tuning.BALL_RADIUS + 0.01)
 			vel = Vector3(vel.x * 0.5, minf(vel.y, 0.0) * 0.5, -vel.z * Tuning.NET_BOUNCE)
+			wobble_amp = 0.0        # bola morta na rede não flutua mais
 			events.append({"type": Ev.NET, "pos": pos})
 		else:
 			var outside := absf(pos.x) > Tuning.COURT_HALF_W + Tuning.BALL_RADIUS
@@ -107,12 +168,12 @@ func predict(max_t: float = 6.0, step: float = 1.0 / 120.0) -> Dictionary:
 	var pts := PackedVector3Array([sim.pos])
 	var times := PackedFloat64Array([0.0])
 	var t := 0.0
-	while t < max_t and not sim.landed:
+	while t < max_t and not sim.landed and not sim.stopped:
 		sim.advance(step)
 		t += step
 		pts.append(sim.pos)
 		times.append(t)
-	return {"points": pts, "times": times, "land": sim.pos, "landed": sim.landed}
+	return {"points": pts, "times": times, "land": sim.pos, "landed": sim.landed, "blocked": sim.stopped}
 
 
 ## Primeiro instante (relativo) em que a bola DESCE pela altura h no lado `side` (+1/-1).
@@ -129,9 +190,20 @@ static func find_descent(pred: Dictionary, h: float, side: float) -> Dictionary:
 	return {}
 
 
+## Posição daqui a t segundos, sem mexer na bola (sem rede nem chão).
+func pos_after(t: float) -> Vector3:
+	var p := pos + (vel * t + Vector3(0.0, -0.5 * g * t * t, 0.0))
+	if wobble_amp != 0.0:
+		# termo exato (não integrado): o preditor com outro passo dá o mesmo x
+		p.x += wobble_amp * (sin(wobble_freq * (age + t) + wobble_phase) - sin(wobble_freq * age + wobble_phase))
+	return p
+
+
 func _move(t: float) -> void:
-	pos += vel * t + Vector3(0.0, -0.5 * g * t * t, 0.0)
+	pos = pos_after(t)
 	vel.y -= g * t
+	age += t
+	clock += t
 
 
 ## Tempo até o centro da bola descer até a altura h (INF se nunca).

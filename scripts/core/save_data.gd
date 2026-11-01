@@ -3,7 +3,7 @@ extends RefCounted
 ## Progresso, recordes e opções em user://save.cfg (ConfigFile versionado).
 ## Arquivo ausente ou ilegível = valores padrão; nunca derruba o jogo.
 
-const VERSION := 1
+const VERSION := 2                  # 2: tipo de saque nas opções (Fase 2)
 const DEFAULT_PATH := "user://save.cfg"
 const AIM_SENS_MIN := 0.5
 const AIM_SENS_MAX := 2.0
@@ -17,6 +17,7 @@ var losses: Array[int] = [0, 0, 0]
 var aim_sens := 1.0                 # multiplicador de Tuning.AIM_SENS
 var left_handed := false
 var vibration := true
+var serve_type := ServeType.Kind.UNDER   # último tipo de saque escolhido
 
 
 func _init(p_path := DEFAULT_PATH) -> void:
@@ -36,6 +37,8 @@ func load_file() -> void:
 	aim_sens = clampf(float(cfg.get_value("options", "aim_sens", 1.0)), AIM_SENS_MIN, AIM_SENS_MAX)
 	left_handed = bool(cfg.get_value("options", "left_handed", false))
 	vibration = bool(cfg.get_value("options", "vibration", true))
+	# save versão 1 não tem o campo: fica o padrão
+	serve_type = clampi(_int(cfg, "options", "serve_type", ServeType.Kind.UNDER), 0, ServeType.NAMES.size() - 1)
 
 
 ## Grava num arquivo temporário e troca de nome: um desligamento no meio não corrompe o save.
@@ -50,6 +53,7 @@ func save_file() -> Error:
 	cfg.set_value("options", "aim_sens", aim_sens)
 	cfg.set_value("options", "left_handed", left_handed)
 	cfg.set_value("options", "vibration", vibration)
+	cfg.set_value("options", "serve_type", serve_type)
 	var tmp := path + ".tmp"
 	var err := cfg.save(tmp)
 	if err != OK:

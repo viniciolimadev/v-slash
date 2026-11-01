@@ -4,7 +4,7 @@ Complementa o [SDD geral](SDD.md) (seção 9.2) e o [ROADMAP](ROADMAP.md). Desig
 
 | | |
 |---|---|
-| Versão | 1.0 — 2026-10-31 |
+| Versão | 1.1 — 2026-10-31 (implementada; ver seção 9) |
 | Base | Fase 1 concluída (PR #11, versão 0.2.0) |
 | Versão ao fim da fase | 0.3.0 |
 | Decisões que valem aqui | DP-01 (3 toques no 1v1), DP-03 (stamina atrás de flag) |
@@ -359,3 +359,44 @@ Depois da fatia: rodar a simulação de equilíbrio (tabela do README em % de po
 | B-4 | Bloqueio não conta como toque (regra de quadra); no 2v2 da Fase 3 revisitar (na praia conta) | contar como toque |
 | B-5 | Tipo de saque lembrado no save | volta para POR BAIXO a cada partida |
 | B-6 | Assistência "bola boa fica dentro" não vale para VIAGEM | vale para todos |
+| B-7 | `HitResolver.resolve` devolve `HitResolver.Shot` (classe tipada), não `Dictionary` (regra de estilo: estrutura de domínio nova é `RefCounted`). O cálculo do saque também foi para o resolver (`serve`) | `Dictionary` como no esboço da seção 4.1 |
+| B-8 | POR BAIXO voa **1,45 s** (o saque da Fase 1), não 1,8 s: com 1,8 s a partida casual × Fácil foi para 8,9–9,2 min (RNF-2.03). FLUTUANTE 1,3 s, VIAGEM 1,05 s | 1,8 s e aceitar partida mais longa |
+| B-9 | A bola é lançada da mão a `SERVE_HAND_H` = 1,5 m: com a mão a 1,05 m o flutuante subiria só até 2,25 m e nunca desceria pelo contato (2,45 m) | contato mais baixo |
+| B-10 | A nota do saque com timing vai no sinal novo `served(player, kind, grade)`; `touch_made` continua com "SAQUE" (as estatísticas não contam saque como toque) | nota no `touch_made` |
+| B-11 | Viagem sem "passo à frente": só o pulo automático (o sacador fica preso atrás da linha) | animar o passo na Fase 4 |
+| B-12 | Fora do App (F6) o seletor de saque fica à esquerda do botão do nível do bot | só na partida do App |
+| B-13 | O flutuante sorteia a fase da oscilação; se o balanço levaria a bola para fora da antena ao cruzar a rede, a fase é invertida (o erro do flutuante é de leitura, não de sorte) | deixar sair pela antena |
+| B-14 | O ponto de queda revela `FLOAT_REVEAL` s antes do **pouso**; o anel, antes do **contato** | os dois pelo contato |
+| B-15 | O plano das mãos fica **do lado do atacante** (z = −side·`BLOCK_DEPTH`: as mãos passam a fita), não do lado do bloqueador: senão o bloqueio PERFEITO, para voltar ao lado do atacante, bateria na rede | plano do lado do bloqueador e relançar a bola do outro lado |
+| B-16 | Erro do bloqueio = pico − contato: pular cedo dá **CEDO** (como soltar cedo nos outros toques) | contato − pico, como o esboço |
+| B-17 | Depois que a cortada sai, o botão de quem defende é RECEBER (o plano normal tem prioridade): o bloqueio é decidido antes do ataque, como na quadra | bloquear também depois da cortada |
+| B-18 | O pulo de bloqueio é no lugar (mãos em x fixo, sem a deriva do pulo de ataque); depois dele o jogador não toca por `2·JUMP_TIME_UP + BLOCK_RECOVER` | deriva até o x previsto |
+| B-19 | Bloqueio ruim desvia por cima da rede (sem bater nela) para fora pela lateral mais perto: ponto do atacante | desvio aleatório que às vezes fica dentro |
+| B-20 | A largada é garantida pela **altura ao cruzar as mãos e a rede** (≥ `NET_HEIGHT + BLOCK_REACH + DINK_APEX_MARGIN`), não pelo ápice: com ápice alto mas antes da rede a bola já descia e batia no bloqueio | ápice, como o esboço |
+| B-21 | O peixinho vale para quem tem `Player.can_dive` (humano sempre; bot a partir do Médio): sem atalho de regra, é um atributo do jogador como a velocidade | parâmetro no `attempt_hit` |
+| B-22 | Ímãs e limites da mira usam a ação do plano durante o PEIXINHO (`Game.aim_act`): a recepção de peixinho continua grudando no levantador | ímãs próprios do peixinho |
+| B-23 | A flag é a constante `Tuning.STAMINA_ENABLED`, copiada para `Game.stamina_on` (os testes ligam com `set_stamina(true)`); a recuperação em jogo só corre com a bola em jogo (`PLAY`) | flag só em `Tuning` |
+| B-24 | Sem bloqueador na rede, a largada só passa a rede (rápida e curta); com bloqueador, sobe acima do alcance do bloqueio. Com a largada sempre alta, a bola lenta era fácil para o bot e a partida casual × Fácil passava de 9 min | sempre alta |
+| B-25 | Peixinho mais limitado que o esboço: `DIVE_REACH` 2,1 m (era 2,6) e `DIVE_Q_MAX` 0,35 (era 0,5, "qualidade sempre baixa" do ROADMAP). Com 2,6/0,5 a partida casual × Fácil ia a 9,9 min (48 sementes) | valores do esboço e meta de duração maior |
+| B-26 | Bot: cortada sempre além de `DINK_DIST` + 0,3 m (senão a mira curta viraria largada sem querer); o Difícil larga 25% quando você está no bloqueio e 10% quando não está | cortada curta continua possível |
+
+---
+
+## 10. Resultado (fim da fase)
+
+Simulação `tests/balance_sim.gd` (humano roteirizado: não bloqueia; o "bom" ataca longe das mãos do bot quando ele está na rede). Pontos: 4 × 20 min por célula. Partidas: casual × Fácil, 48 sementes.
+
+| | Fácil | Médio | Difícil |
+|---|---|---|---|
+| bom (Fase 1 → Fase 2) | 72% → 74% | 47% → **37%** | 16% → 22% |
+| casual (Fase 1 → Fase 2) | 50% → 50% | 34% → 26% | 13% → 14% |
+
+| Casual × Fácil, partidas inteiras | Fase 1 | Fase 2 |
+|---|---|---|
+| Vitórias | 52% | **46%** (RNF-2.02: 35–60% ✔) |
+| Duração média | 8,3 min (7,6 s/ponto) | **8,8 min** (8,3 s/ponto) (RNF-2.03: 6–9 ✔, com pouca folga) |
+
+**Em aberto:**
+- RNF-2.02 "bom × Médio perto de 50%": ficou em ~37–42% (ruído de ±4 pontos entre rodadas). O Médio ficou mais forte com flutuante, bloqueio, largada e peixinho; mexer em `BOT_POWER`/`BOT_TIMING_SIGMA`/`BOT_SPEED` do Médio não moveu o número além do ruído. Decidir no celular: aceitar, ou tirar o peixinho do Médio (chegou a 41–43% na simulação).
+- Duração: o teste do CI (8 sementes) dá 8,4 min; com 48 sementes, 8,8 min. Peixinho e largada alongam o rally (+0,7 s por ponto).
+- Critérios 5 e 6 (teste no celular, decisão da stamina) dependem do dono do projeto.

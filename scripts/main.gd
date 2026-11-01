@@ -53,6 +53,7 @@ func _process(_delta: float) -> void:
 	controls.action_hot = game.is_hot(human)
 	controls.queue_redraw()
 	hud.set_board(game.rules, game.rally_touches, game.best_rally)
+	hud.show_serve_picker(_can_pick_serve(), game.serve_type[human.team])
 	_update_badge()
 
 
@@ -105,6 +106,7 @@ func _build_match() -> void:
 	game.setup(ball, players, bots)
 	game.set_bot_level(config.bot_level)
 	game.aim_sens = config.aim_sens
+	game.serve_type[human.team] = config.serve_type
 	stats.attach(game)
 	markers = Markers.new()
 	add_child(markers)
@@ -147,6 +149,8 @@ func _build_ui() -> void:
 	controls.aim_dragged.connect(_on_aim_dragged)
 	hud.reset_pressed.connect(_on_reset)
 	hud.level_pressed.connect(_on_level)
+	hud.serve_type_chosen.connect(_on_serve_type)
+	game.served.connect(_on_served)
 	game.touch_made.connect(_on_touch)
 	game.whiffed.connect(_on_whiff)
 	game.point_scored.connect(_on_point)
@@ -195,6 +199,26 @@ func _on_reset() -> void:
 func _on_level() -> void:
 	game.set_bot_level((game.bot_level + 1) % 3)
 	hud.set_level_name(game.level_name())
+
+
+## Escolher o saque só faz sentido parado no seu saque (no tutorial, não).
+func _can_pick_serve() -> bool:
+	return not autoplay and tutorial == null and game.state == Game.State.SERVE_WAIT \
+			and game.server == human and not game.human_aiming
+
+
+func _on_serve_type(kind: int) -> void:
+	game.serve_type[human.team] = kind
+	config.serve_type = kind
+	if save != null:
+		save.serve_type = kind
+		save.save_file()
+
+
+func _on_served(p: Player, _kind: int, grade: String) -> void:
+	# saque com timing mostra a nota como os outros toques; por baixo não tem nota
+	if p == human and grade != "SAQUE":
+		hud.popup(grade, Color(0.45, 1.0, 0.55) if grade == "PERFEITO!" else Color(1.0, 0.95, 0.65))
 
 
 func _on_touch(p: Player, grade: String, quality: float) -> void:

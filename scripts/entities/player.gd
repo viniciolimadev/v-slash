@@ -1,6 +1,6 @@
 class_name Player
 extends Node3D
-## Jogador: anda (joystick ou bot), pula sozinho no ataque e anima o toque.
+## Jogador: anda (joystick ou bot), pula sozinho no ataque, mergulha no peixinho e anima o toque.
 
 var team := 0
 var is_human := false
@@ -13,6 +13,10 @@ var magnet_point := Vector3.ZERO
 var look_target := Vector3.ZERO
 var vel := Vector3.ZERO
 var swing_cd := 0.0
+var can_dive := true                # o bot no Fácil não faz peixinho
+var diving_t := 0.0                 # s que ainda faltam no chão depois do peixinho
+var stamina := 1.0                  # 0..1; só vale com Game.stamina_on (Tuning.STAMINA_ENABLED)
+var stamina_on := false
 
 var _jump_t := -1.0
 var _jump_target := Vector3.ZERO
@@ -56,8 +60,11 @@ func reset_state() -> void:
 	move_input = Vector2.ZERO
 	vel = Vector3.ZERO
 	swing_cd = 0.0
+	diving_t = 0.0
 	_jump_t = -1.0
 	position.y = 0.0
+	if _body != null:
+		_body.rotation.x = 0.0
 
 
 func step(dt: float) -> void:
@@ -73,11 +80,16 @@ func step(dt: float) -> void:
 		if _jump_t >= Tuning.JUMP_TIME_UP * 2.0:
 			_jump_t = -1.0
 		vel = Vector3.ZERO
+	elif diving_t > 0.0:
+		# no chão: o embalo do mergulho acaba logo e o joystick não move até levantar
+		diving_t = maxf(diving_t - dt, 0.0)
+		vel = vel.move_toward(Vector3.ZERO, Tuning.ACCEL * dt)
+		position += vel * dt
 	else:
 		var wish := Vector3(move_input.x, 0.0, move_input.y)
 		if wish.length() > 1.0:
 			wish = wish.normalized()
-		var desired := wish * speed
+		var desired := wish * speed * (Tuning.TIRED_SPEED if is_tired() else 1.0)
 		if magnet_on and wish.length() < 0.1:
 			var to_m := magnet_point - position
 			to_m.y = 0.0
@@ -88,6 +100,8 @@ func step(dt: float) -> void:
 		position += vel * dt
 	_clamp_to_court()
 	position.y = _jump_offset()
+	if _body != null:
+		_body.rotation.x = -deg_to_rad(80.0) * _dive_tilt()
 	var look := look_target - position
 	look.y = 0.0
 	if look.length() > 0.05 and _body != null:
@@ -103,6 +117,50 @@ func lunge(toward: Vector3) -> void:
 	var dist := d.length()
 	if dist > 0.5:
 		vel = d / dist * minf(9.0, dist * 6.0)
+
+
+## Peixinho: mergulha em direção à bola e fica DIVE_RECOVER s no chão.
+func dive(toward: Vector3) -> void:
+	diving_t = Tuning.DIVE_RECOVER
+	var d := Vector3(toward.x - position.x, 0.0, toward.z - position.z)
+	var dist := d.length()
+	if dist > 0.5:
+		# embalo que, freando em ACCEL, cobre a distância que faltava até a bola
+		vel = d / dist * minf(sqrt(2.0 * Tuning.ACCEL * (dist - 0.5)), 10.0)
+	else:
+		vel = Vector3.ZERO
+
+
+func is_diving() -> bool:
+	return diving_t > 0.0
+
+
+## 0 = em pé, 1 = deitado: deita rápido e levanta no fim do tempo no chão.
+func _dive_tilt() -> float:
+	if diving_t <= 0.0:
+		return 0.0
+	var elapsed := Tuning.DIVE_RECOVER - diving_t
+	return minf(clampf(elapsed / 0.12, 0.0, 1.0), clampf(diving_t / 0.3, 0.0, 1.0))
+
+
+func is_tired() -> bool:
+	return stamina_on and stamina < Tuning.STAMINA_TIRED
+
+
+## Altura do pulo agora (cansado pula menos; o bloqueio usa a mesma conta).
+func jump_height() -> float:
+	return Tuning.JUMP_HEIGHT * (Tuning.TIRED_JUMP if is_tired() else 1.0)
+
+
+## Gasta stamina (sem stamina a ação sai mesmo assim, só que "cansada").
+func spend(cost: float) -> void:
+	if stamina_on:
+		stamina = maxf(stamina - cost, 0.0)
+
+
+func recover(amount: float) -> void:
+	if stamina_on:
+		stamina = minf(stamina + amount, 1.0)
 
 
 func is_grounded() -> bool:
@@ -123,8 +181,8 @@ func swing(kind: int) -> void:
 		_swing_tw.kill()
 	_swing_tw = create_tween()
 	var peak := 1.2                         # manchete: braços à frente
-	if kind == Game.Act.SET_BALL:
-		peak = 2.9                          # toque: braços para cima
+	if kind == Game.Act.SET_BALL or kind == Game.Act.BLOCK or kind == Game.Act.DINK:
+		peak = 2.9                          # toque, bloqueio e largada: braços para cima
 	elif kind == Game.Act.ATTACK:
 		_arms.rotation.x = 3.0
 		peak = 0.5                          # cortada: de cima para baixo
@@ -156,7 +214,7 @@ func _jump_offset() -> float:
 	if _jump_t < 0.0:
 		return 0.0
 	var u := clampf(_jump_t / (Tuning.JUMP_TIME_UP * 2.0), 0.0, 1.0)
-	return 4.0 * Tuning.JUMP_HEIGHT * u * (1.0 - u)
+	return 4.0 * jump_height() * u * (1.0 - u)
 
 
 func _add_mesh(parent: Node3D, mesh: Mesh, pos: Vector3, color: Color) -> MeshInstance3D:

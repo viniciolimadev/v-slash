@@ -8,11 +8,17 @@ signal touch_made(player: Player, grade: String, quality: float)
 signal whiffed(player: Player, why: String)
 signal set_over(team: int, set_index: int, final: Vector2i)
 signal match_over(team: int)
+signal served(player: Player, serve_kind: int, grade: String)
+## Mecânica da Fase 2 usada (pulo de bloqueio, largada, peixinho): estatística e testes.
+## DINK e DIVE não são planejados por _make_plan: são variações decididas na hora
+## (DINK pela mira; DIVE pela distância até a bola).
+signal action_used(player: Player, act: int)
 
-enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER }
-enum Act { NONE, SERVE, RECEIVE, SET_BALL, ATTACK, FREEBALL }
+## SERVE_TOSS: bola lançada no saque flutuante/viagem, esperando o toque (Fase 2).
+enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER, SERVE_TOSS }
+enum Act { NONE, SERVE, RECEIVE, SET_BALL, ATTACK, FREEBALL, BLOCK, DINK, DIVE }
 
-const ACT_LABELS := ["", "SACAR", "RECEBER", "LEVANTAR", "ATACAR", "PASSAR"]
+const ACT_LABELS := ["", "SACAR", "RECEBER", "LEVANTAR", "ATACAR", "PASSAR", "BLOQUEAR", "LARGAR", "PEIXINHO"]
 
 var state: int = State.SERVE_WAIT
 var time := 0.0
@@ -30,16 +36,26 @@ var best_rally := 0
 var rally_over := false
 var plan: ContactPlan = null        # ver _make_plan()
 var plan_id := 0
+## Bloqueio possível para o time que defende um ataque (ver _update_block_plan()).
+## t = quando a bola cruza a rede; pos = ponto na rede do seu lado.
+var block_plan: ContactPlan = null
+var blocks: Array[Block] = []       # mãos no ar agora
+var last_kind: int = Act.NONE       # tipo do último toque (o ataque abre o bloqueio)
 var land_point := Vector3.ZERO      # onde a bola cai se ninguém tocar
 var land_in := true
+var land_display := Vector3.ZERO    # ponto de queda "sem efeito" (flutuante); ver land_view()
+var land_t := 0.0                   # relógio do pouso previsto
 var bot_level := 0                  # começa no Fácil: a meta da Fase 0 é sentir o gesto
 var rng := RandomNumberGenerator.new()
+var resolver := HitResolver.new(rng)
 
 var human_aiming := false
 ## Mira do humano: um ponto só, que se move apenas quando você arrasta.
 ## A bola vai para onde ela está (os ímãs ajudam quando ela está perto de um alvo).
 var human_aim := Vector3.ZERO
 var aim_sens := 1.0                 # opção do jogador: multiplica Tuning.AIM_SENS
+var serve_type: Array[int] = [ServeType.Kind.UNDER, ServeType.Kind.UNDER]   # por time
+var stamina_on := Tuning.STAMINA_ENABLED      # ver set_stamina()
 var _pause_t := 0.0
 var _next_server := 0
 var _set_break := false             # a pausa atual é de fim de set
@@ -56,7 +72,16 @@ func setup(p_ball: Ball, p_players: Array[Player], p_bots: Array[BotBrain]) -> v
 			# começa no fundo da quadra adversária
 			human_aim = Vector3(0.0, 0.0, -side_of_team(p.team) * Tuning.AIM_DEEP)
 	rng.randomize()
+	set_stamina(stamina_on)
 	_reset_for_serve(0)
+
+
+## Liga/desliga a stamina (experimento): a barra de todos volta a cheia.
+func set_stamina(on: bool) -> void:
+	stamina_on = on
+	for p in players:
+		p.stamina_on = on
+		p.stamina = 1.0
 
 
 func reset_match() -> void:
@@ -85,8 +110,11 @@ func tick(dt: float) -> void:
 		b.tick(dt)
 	for p in players:
 		p.look_target = ball.position
+		if state == State.PLAY:
+			p.recover(Tuning.STAMINA_REGEN * dt)
 		p.step(dt)
 	_auto_jumps()
+	_update_block_plan()
 	for e in ball.step(dt):
 		_on_ball_event(e)
 	_run_pending()
@@ -121,9 +149,38 @@ func current_act(p: Player) -> int:
 		if p == server and ball.mode == Ball.Mode.HELD:
 			return Act.SERVE
 		return Act.NONE
-	if state != State.PLAY or plan == null or plan.player != p:
+	if not _in_rally():
 		return Act.NONE
-	return plan.act
+	if plan != null and plan.player == p:
+		# o botão avisa a largada antes de soltar: a mira está numa zona curta
+		if plan.act == Act.ATTACK and p == human and is_dink(p, clamp_aim(p, human_aim, Act.ATTACK)):
+			return Act.DINK
+		if _will_dive(p):
+			return Act.DIVE
+		return plan.act
+	if block_plan != null and block_plan.player == p:
+		return Act.BLOCK
+	return Act.NONE
+
+
+## Ação que a mira usa (ímãs, limites): o peixinho mira como o toque do plano.
+func aim_act(p: Player) -> int:
+	var act := current_act(p)
+	return plan.act if act == Act.DIVE else act
+
+
+## No ritmo atual, o jogador não chega ao alcance normal até o contato, mas chega ao do peixinho?
+func _will_dive(p: Player) -> bool:
+	if not p.can_dive or plan.act == Act.ATTACK or plan.act == Act.SERVE:
+		return false
+	var at := plan_view_pos(plan)
+	var to := Vector2(at.x - p.position.x, at.z - p.position.z)
+	var dist := to.length()
+	if dist <= Tuning.REACH:
+		return false
+	var closing := maxf(Vector2(p.vel.x, p.vel.z).dot(to / dist), 0.0)
+	var left := dist - closing * maxf(plan.t - time, 0.0)
+	return left > Tuning.REACH and left <= Tuning.DIVE_REACH
 
 
 func action_label(p: Player) -> String:
@@ -132,9 +189,48 @@ func action_label(p: Player) -> String:
 
 ## Está na hora de soltar? (o botão acende)
 func is_hot(p: Player) -> bool:
-	if plan == null or current_act(p) == Act.NONE:
+	var act := current_act(p)
+	if act == Act.BLOCK:
+		return absf(time - block_release_t()) <= Tuning.GOOD
+	if act == Act.NONE or plan == null:
 		return false
-	return absf(time - plan.t) <= Tuning.GOOD
+	return absf(time - plan.t) <= Tuning.GOOD * window_scale()
+
+
+## Hora ideal de soltar o BLOQUEAR: o pico do pulo cai quando a bola cruza a rede.
+func block_release_t() -> float:
+	return block_plan.t - Tuning.JUMP_TIME_UP if block_plan != null else INF
+
+
+## Multiplicador da janela de timing do plano atual (a viagem tem janela menor).
+func window_scale() -> float:
+	if plan != null and plan.act == Act.SERVE:
+		return float(Tuning.SERVE_WINDOW[serve_type[plan.team]])
+	return 1.0
+
+
+## Onde a tela e o bot enxergam o contato do plano: no flutuante, a trajetória sem oscilação
+## até FLOAT_REVEAL s antes do toque; depois o anel desliza para o lugar certo.
+func plan_view_pos(pl: ContactPlan) -> Vector3:
+	return _reveal(pl.display_pos, pl.pos, pl.t)
+
+
+## Ponto de queda que a tela mostra (mesma leitura atrasada do anel).
+func land_view() -> Vector3:
+	return _reveal(land_display, land_point, land_t)
+
+
+func _reveal(fake: Vector3, real: Vector3, t_event: float) -> Vector3:
+	var k := clampf((time - (t_event - Tuning.FLOAT_REVEAL)) / Tuning.FLOAT_SLIDE, 0.0, 1.0)
+	return fake.lerp(real, k)
+
+
+## Tem alguém do outro time perto da rede, em posição de bloquear um ataque de `team`?
+func blocker_near(team: int) -> bool:
+	for p in players:
+		if p.team != team and absf(p.position.z) <= Tuning.BLOCK_ZONE:
+			return true
+	return false
 
 
 func opponent_of(team: int) -> Player:
@@ -183,9 +279,11 @@ func _magnet_radius(act: int) -> float:
 
 
 ## Mira final: gruda no alvo mais próximo da jogada (se estiver perto).
-func snap_aim(p: Player, raw: Vector3) -> Dictionary:
+## act < 0 = a ação atual do jogador.
+func snap_aim(p: Player, raw: Vector3, act: int = -1) -> Dictionary:
 	var out := {"pos": raw, "name": "", "quick": false}
-	var act := current_act(p)
+	if act < 0:
+		act = aim_act(p)
 	var mags := aim_magnets(p, act)
 	if mags.is_empty():
 		return out
@@ -203,9 +301,19 @@ func snap_aim(p: Player, raw: Vector3) -> Dictionary:
 	return out
 
 
+## Ataque mirado curto vira largada: zona curta (CURTA ESQ/DIR) ou a menos de DINK_DIST da rede.
+func is_dink(p: Player, aim: Vector3) -> bool:
+	var info := snap_aim(p, aim, Act.ATTACK)
+	var target: Vector3 = info["pos"]
+	for z in Tuning.ATTACK_ZONES:
+		if str(z[0]) == str(info["name"]) and bool(z[2]):
+			return true
+	return absf(target.z) < Tuning.DINK_DIST
+
+
 func default_aim(p: Player) -> Vector3:
 	var s := side_of_team(p.team)
-	var act := current_act(p)
+	var act := aim_act(p)
 	if act == Act.NONE:
 		return p.position
 	if act == Act.RECEIVE:
@@ -215,14 +323,15 @@ func default_aim(p: Player) -> Vector3:
 	return Vector3(0.0, 0.0, -s * Tuning.COURT_DEPTH * 0.6)
 
 
-func clamp_aim(p: Player, a: Vector3) -> Vector3:
+func clamp_aim(p: Player, a: Vector3, act: int = -1) -> Vector3:
 	var s := side_of_team(p.team)
 	# assistência: a mira nunca sai da quadra
 	var w := Tuning.COURT_HALF_W - Tuning.AIM_MARGIN
 	var d := Tuning.COURT_DEPTH - Tuning.AIM_MARGIN
 	var out := Vector3(clampf(a.x, -w, w), 0.0, clampf(a.z, -d, d))
-	var act := current_act(p)
-	if act == Act.SERVE or act == Act.ATTACK:
+	if act < 0:
+		act = aim_act(p)
+	if act == Act.SERVE or act == Act.ATTACK or act == Act.DINK:
 		out.z = minf(out.z, -0.6) if s > 0.0 else maxf(out.z, 0.6)
 	return out
 
@@ -232,6 +341,7 @@ func clamp_aim(p: Player, a: Vector3) -> Vector3:
 func human_press(p: Player) -> void:
 	p.holding = true
 	human_aiming = true
+	start_serve(p)
 
 
 func human_drag(p: Player, rel: Vector2) -> void:
@@ -269,12 +379,16 @@ func attempt_hit(p: Player, aim: Vector3, power_cap: float = 1.0) -> void:
 	if p.swing_cd > 0.0:
 		return
 	if state == State.SERVE_WAIT:
-		if p == server and ball.mode == Ball.Mode.HELD:
-			_serve(p, aim)
+		# saque com lançamento: o toque vem depois, no anel (start_serve)
+		if p == server and ball.mode == Ball.Mode.HELD and not ServeType.is_tossed(serve_type[p.team]):
+			_serve(p, aim, Tuning.SERVE_Q_UNDER)
 		return
-	if state != State.PLAY or rally_over:
+	if not _in_rally() or rally_over:
 		return
 	if plan == null or plan.player != p:
+		if block_plan != null and block_plan.player == p:
+			_start_block(p)
+			return
 		_whiff(p, "SEM BOLA")
 		return
 	for item in _pending:
@@ -282,10 +396,11 @@ func attempt_hit(p: Player, aim: Vector3, power_cap: float = 1.0) -> void:
 			return
 	var t_ideal := plan.t
 	var err := time - t_ideal
-	if err < -Tuning.WINDOW_EARLY:
+	var w := window_scale()
+	if err < -Tuning.WINDOW_EARLY * w:
 		_whiff(p, "CEDO")
 		return
-	if err > Tuning.WINDOW_LATE:
+	if err > Tuning.WINDOW_LATE * w:
 		_whiff(p, "TARDE")
 		return
 	_pending.append({
@@ -308,88 +423,103 @@ func _run_pending() -> void:
 			due.append(item)
 	_pending = keep
 	for item in due:
-		if int(item["plan_id"]) != plan_id or state != State.PLAY or rally_over:
+		if int(item["plan_id"]) != plan_id or not _in_rally() or rally_over:
 			continue
 		_execute(item["player"], item["aim"], float(item["err"]), float(item["cap"]))
 
 
 func _execute(p: Player, aim: Vector3, err: float, cap: float) -> void:
 	var from := ball.position
-	if Vector2(from.x - p.position.x, from.z - p.position.z).length() > Tuning.REACH:
+	var dist := Vector2(from.x - p.position.x, from.z - p.position.z).length()
+	# um pouco longe demais: peixinho automático (alcança, mas o toque sai fraco). No ar não dá.
+	var dive := dist > Tuning.REACH and dist <= Tuning.DIVE_REACH and p.can_dive and p.is_grounded() \
+			and plan.act != Act.ATTACK and plan.act != Act.SERVE
+	if dist > Tuning.REACH and not dive:
 		_whiff(p, "LONGE")
 		return
 	var a := absf(err)
+	var w := window_scale()
 	var q := 1.0
 	var grade := "PERFEITO!"
-	if a > Tuning.PERFECT:
-		if a <= Tuning.GOOD:
+	if a > Tuning.PERFECT * w:
+		if a <= Tuning.GOOD * w:
 			q = 0.7
 			grade = "BOM"
 		else:
 			q = 0.35
 			grade = "CEDO" if err < 0.0 else "TARDE"
-	var power := minf(q, cap)          # timing = precisão; o bot só limita a FORÇA
+	if plan.act == Act.SERVE:
+		_serve(p, aim, q, grade)
+		return
+	if dive:
+		q = minf(q, Tuning.DIVE_Q_MAX)
+		p.spend(Tuning.STAMINA_COST_DIVE)
+		action_used.emit(p, Act.DIVE)
 	var act := plan.act
-	var info := snap_aim(p, aim)
-	var target: Vector3 = info["pos"]
-	var s := side_of_team(p.team)
-	var over := side_of_point(target) != s or act == Act.ATTACK
-	var kind := act
-	if over and (act == Act.RECEIVE or act == Act.SET_BALL):
-		kind = Act.FREEBALL
-	target = _scatter(target, kind, q)
-	target = _keep_side(target, -s if over else s, 0.4)
-	if p.is_human and q >= Tuning.ASSIST_KEEP_IN_Q:
-		target = keep_inside(target)
-	var v := Vector3.ZERO
-	var grav := Tuning.GRAVITY
-	if kind == Act.RECEIVE:
-		var to := Vector3(target.x, Tuning.H_SET, target.z)
-		v = BallSim.launch_velocity(from, to, Tuning.T_RECEIVE * lerpf(0.82, 1.0, q))
-	elif kind == Act.SET_BALL:
-		var to := Vector3(target.x, Tuning.H_ATTACK, target.z)
-		var t_set := Tuning.T_SET_QUICK if bool(info["quick"]) else Tuning.T_SET_HIGH
-		v = BallSim.launch_velocity(from, to, t_set)
-	elif kind == Act.ATTACK:
-		var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
-		var dist := Vector2(to.x - from.x, to.z - from.z).length()
-		var spd := lerpf(Tuning.ATTACK_SPEED_MIN, Tuning.ATTACK_SPEED_MAX, power)
-		grav = Tuning.SPIKE_GRAVITY
-		v = BallSim.clear_net_velocity(from, to, maxf(dist / spd, 0.25), grav)
+	if act == Act.ATTACK and is_dink(p, aim):
+		act = Act.DINK
+		action_used.emit(p, Act.DINK)
+	var shot := resolver.resolve(self, p, act, aim, q, cap)
+	if act == Act.ATTACK:
+		p.spend(Tuning.STAMINA_COST_ATTACK * minf(q, cap))
+	_launch(shot)
+	if dive:
+		p.dive(shot.from)
 	else:
-		var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
-		v = BallSim.clear_net_velocity(from, to, Tuning.T_FREEBALL)
-	ball.launch(from, v, grav)
-	p.lunge(from)
+		p.lunge(shot.from)
 	if p.team != last_team:
 		touches = 1
 	else:
 		touches += 1
 	last_team = p.team
+	last_kind = shot.kind
 	rally_touches += 1
 	p.swing_cd = 0.25
-	p.swing(kind)
+	p.swing(shot.kind)
 	touch_made.emit(p, grade, q)
 	_make_plan()
 
 
-func _serve(p: Player, aim: Vector3) -> void:
+## Aperto do sacador: no flutuante e na viagem lança a bola para cima e cria o plano
+## do saque (anel embaixo do sacador). Por baixo não faz nada: saca ao soltar.
+func start_serve(p: Player) -> void:
+	if state != State.SERVE_WAIT or p != server or ball.mode != Ball.Mode.HELD:
+		return
+	var kind := serve_type[p.team]
+	if not ServeType.is_tossed(kind):
+		return
 	var s := side_of_team(p.team)
-	var q := 0.85                      # Fase 0: saque sem timing (barra de força chega na Fase 2)
-	var snapped: Vector3 = snap_aim(p, aim)["pos"]
-	var target := _keep_side(_scatter(snapped, Act.SERVE, q), -s, 0.8)
-	if p.is_human and q >= Tuning.ASSIST_KEEP_IN_Q:
-		target = keep_inside(target)
-	var from := p.position + Vector3(0.0, 1.05, -0.3 * s)
-	var to := Vector3(target.x, Tuning.BALL_RADIUS, target.z)
-	ball.launch(from, BallSim.clear_net_velocity(from, to, Tuning.T_SERVE))
+	var hand := p.position + Vector3(0.0, Tuning.SERVE_HAND_H, -0.3 * s)
+	var up := sqrt(2.0 * Tuning.GRAVITY * float(Tuning.SERVE_TOSS_H[kind]))
+	ball.launch(hand, Vector3(0.0, up, 0.0))
+	state = State.SERVE_TOSS
+	plan_id += 1
+	var pred := ball.sim.predict()
+	land_point = pred["land"]
+	land_in = is_inside(land_point)
+	var hit := BallSim.find_descent(pred, float(Tuning.SERVE_CONTACT_H[kind]), s)
+	plan = ContactPlan.new(p.team, 0, Act.SERVE, time + float(hit["t"]), hit["pos"], p)
+
+
+func _serve(p: Player, aim: Vector3, q: float, grade: String = "SAQUE") -> void:
+	var s := side_of_team(p.team)
+	var kind := serve_type[p.team]
+	var from := ball.position
+	if ball.mode == Ball.Mode.HELD:
+		from = p.position + Vector3(0.0, float(Tuning.SERVE_CONTACT_H[kind]), -0.3 * s)
+	var shot := resolver.serve(self, p, kind, from, aim, q)
+	if kind == ServeType.Kind.JUMP:
+		p.spend(Tuning.STAMINA_COST_JUMP_SERVE)
+	_launch(shot)
 	p.serving = false
 	state = State.PLAY
 	last_team = p.team
+	last_kind = Act.SERVE
 	touches = 3          # quem sacou não pode tocar de novo antes da bola passar
 	rally_touches = 1
 	p.swing(Act.SERVE)
 	touch_made.emit(p, "SAQUE", q)
+	served.emit(p, kind, grade)
 	_make_plan()
 
 
@@ -413,23 +543,99 @@ func feed_ball(to: Vector3, flight_time: float) -> void:
 	_make_plan()
 
 
+## Lança a bola real com o relógio e as mãos de bloqueio no ar (o preditor herda os dois).
+func _launch(shot: HitResolver.Shot) -> void:
+	ball.launch(shot.from, shot.vel, shot.grav)
+	ball.sim.set_wobble(shot.wobble_amp, Tuning.FLOAT_FREQ, shot.wobble_phase)
+	ball.sim.clock = time
+	ball.sim.blocks = blocks.duplicate()
+
+
+# ---------------------------------------------------------------- bloqueio
+
+## Quem pode bloquear o ataque que vem: o defensor mais perto da rede, se estiver na zona.
+## Antes do ataque, x e tempo estimados pelo plano do atacante; depois, exatos pelo preditor.
+func _update_block_plan() -> void:
+	block_plan = null
+	var now := time
+	blocks = blocks.filter(func(bk: Block) -> bool: return bk.t_end() > now)
+	if state != State.PLAY or rally_over:
+		return
+	var atk_team := -1
+	var x := 0.0
+	var t_cross := 0.0
+	if plan != null and plan.act == Act.ATTACK:
+		atk_team = plan.team
+		x = plan.pos.x
+		t_cross = plan.t + absf(plan.pos.z) / Tuning.ATTACK_SPEED_MAX
+	elif last_kind == Act.ATTACK and ball.mode == Ball.Mode.FLYING and not ball.sim.stopped \
+			and side_of_point(ball.position) == side_of_team(last_team) and absf(ball.sim.vel.z) > 1e-6:
+		atk_team = last_team
+		var tc := -ball.sim.pos.z / ball.sim.vel.z
+		x = ball.sim.pos_after(tc).x
+		t_cross = time + tc
+	else:
+		return
+	var s := side_of_team(1 - atk_team)
+	var best: Player = null
+	for p in players:
+		if p.team != atk_team and p.is_grounded() and absf(p.position.z) <= Tuning.BLOCK_ZONE:
+			if best == null or absf(p.position.z) < absf(best.position.z):
+				best = p
+	if best == null:
+		return
+	block_plan = ContactPlan.new(best.team, 0, Act.BLOCK, t_cross, Vector3(x, 0.0, s * 0.5), best)
+
+
+## Soltar com BLOQUEAR: pula no lugar; as mãos valem enquanto passam da fita.
+func _start_block(p: Player) -> void:
+	if not p.is_grounded():
+		return
+	p.start_jump(p.position)
+	var bk := Block.new(p, time, p.jump_height())
+	p.spend(Tuning.STAMINA_COST_BLOCK)
+	blocks.append(bk)
+	p.swing_cd = Tuning.JUMP_TIME_UP * 2.0 + Tuning.BLOCK_RECOVER
+	p.swing(Act.BLOCK)
+	action_used.emit(p, Act.BLOCK)
+	if ball.mode == Ball.Mode.FLYING:
+		ball.sim.blocks.append(bk)
+		# o preditor já sabe do bloqueio: se esta bola vai bater nas mãos, o plano muda
+		if bool(ball.sim.predict()["blocked"]):
+			_make_plan()
+
+
+## Bola bateu nas mãos: a saída vem do timing do pulo (erro = pico − contato; pulou cedo = CEDO).
+## O bloqueio não conta como toque: o time do bloqueador ainda tem os 3.
+func _on_block(e: Dictionary) -> void:
+	var bk: Block = e["block"]
+	var from: Vector3 = e["pos"]
+	blocks.erase(bk)
+	var err := bk.t_peak() - ball.sim.clock
+	var a := absf(err)
+	var q := 1.0
+	var grade := "PERFEITO!"
+	if a > Tuning.PERFECT:
+		if a <= Tuning.GOOD:
+			q = 0.7
+			grade = "BOM"
+		else:
+			q = 0.35
+			grade = "CEDO" if err < 0.0 else "TARDE"
+	var shot := resolver.block_exit(from, bk, q)
+	_launch(shot)
+	last_team = bk.team
+	last_kind = Act.BLOCK
+	touches = 0
+	rally_touches += 1
+	touch_made.emit(bk.player, grade, q)
+	_make_plan()
+
+
 func _whiff(p: Player, why: String) -> void:
 	p.swing_cd = Tuning.WHIFF_COOLDOWN
 	p.swing(Act.NONE)
 	whiffed.emit(p, why)
-
-
-func _scatter(target: Vector3, kind: int, q: float) -> Vector3:
-	var base := Tuning.SCATTER_RECEIVE
-	if kind == Act.SET_BALL:
-		base = Tuning.SCATTER_SET
-	elif kind == Act.ATTACK or kind == Act.FREEBALL:
-		base = Tuning.SCATTER_ATTACK
-	elif kind == Act.SERVE:
-		base = Tuning.SCATTER_SERVE
-	var r := base * (1.0 - q) * sqrt(rng.randf())
-	var ang := rng.randf() * TAU
-	return target + Vector3(cos(ang) * r, 0.0, sin(ang) * r)
 
 
 ## Assistência: traz o alvo para dentro da quadra (com folga das linhas).
@@ -455,6 +661,15 @@ func _make_plan() -> void:
 	var pred := ball.sim.predict()
 	land_point = pred["land"]
 	land_in = is_inside(land_point)
+	land_t = time + _last_time(pred)
+	land_display = land_point
+	var plain := {}
+	if ball.sim.wobble_amp != 0.0:
+		# leitura atrasada: a mesma conta sem a oscilação (é o que "parece" que vai acontecer)
+		var no_wobble := ball.sim.copy()
+		no_wobble.wobble_amp = 0.0
+		plain = no_wobble.predict()
+		land_display = plain["land"]
 	var recv_side := side_of_point(land_point)
 	var recv_team := 0 if recv_side > 0.0 else 1
 	var n := 1 if recv_team != last_team else touches + 1
@@ -472,9 +687,20 @@ func _make_plan() -> void:
 		if hit.is_empty():
 			continue
 		var at: Vector3 = hit["pos"]
+		var shown := at
+		if not plain.is_empty():
+			var fake := BallSim.find_descent(plain, float(opt[1]), recv_side)
+			if not fake.is_empty():
+				shown = fake["pos"]
 		plan = ContactPlan.new(recv_team, n, int(opt[0]), time + float(hit["t"]), at,
-				_closest_player(recv_team, at))
+				_closest_player(recv_team, shown))
+		plan.display_pos = shown
 		return
+
+
+static func _last_time(pred: Dictionary) -> float:
+	var times: PackedFloat64Array = pred["times"]
+	return times[times.size() - 1]
 
 
 func _closest_player(team: int, at: Vector3) -> Player:
@@ -500,7 +726,10 @@ func _high_set_point(team: int) -> Vector3:
 
 ## Pulo automático: segurando o botão no ataque, o jogador sobe na hora certa.
 func _auto_jumps() -> void:
-	if state != State.PLAY or plan == null or plan.act != Act.ATTACK:
+	if not _in_rally() or plan == null:
+		return
+	var jump_serve := plan.act == Act.SERVE and serve_type[plan.team] == ServeType.Kind.JUMP
+	if plan.act != Act.ATTACK and not jump_serve:
 		return
 	var t_ideal := plan.t
 	if time < t_ideal - Tuning.JUMP_TIME_UP or time > t_ideal + 0.1:
@@ -511,6 +740,11 @@ func _auto_jumps() -> void:
 		return
 	if Vector2(at.x - who.position.x, at.z - who.position.z).length() <= Tuning.REACH + 1.2:
 		who.start_jump(at)
+
+
+## Bola em jogo e tocável: rally ou bola lançada no saque.
+func _in_rally() -> bool:
+	return state == State.PLAY or state == State.SERVE_TOSS
 
 
 func _has_pending(p: Player) -> bool:
@@ -528,7 +762,7 @@ func _update_assists() -> void:
 	var who := plan.player
 	if who != null:
 		who.magnet_on = true
-		who.magnet_point = plan.pos
+		who.magnet_point = plan_view_pos(plan)
 
 
 # ---------------------------------------------------------------- pontos
@@ -536,9 +770,14 @@ func _update_assists() -> void:
 func _on_ball_event(e: Dictionary) -> void:
 	var kind: int = e["type"]
 	var pos: Vector3 = e["pos"]
+	if state == State.SERVE_TOSS and kind == BallSim.Ev.LAND:
+		_award(1 - server_team, "Saque perdido")
+		return
 	if state != State.PLAY or rally_over:
 		return
-	if kind == BallSim.Ev.NET:
+	if kind == BallSim.Ev.BLOCK:
+		_on_block(e)
+	elif kind == BallSim.Ev.NET:
 		_make_plan()        # a trajetória mudou: novo anel
 	elif kind == BallSim.Ev.ANTENNA:
 		_award(1 - last_team, "Fora (antena)")
@@ -567,6 +806,8 @@ func _award(team: int, reason: String) -> void:
 	human_aiming = false
 	for p in players:
 		p.holding = false
+	for p in players:
+		p.recover(Tuning.STAMINA_POINT_BONUS)
 	var r := rules.add_point(team)
 	if bool(r["match_over"]):
 		state = State.MATCH_OVER        # fim: ninguém saca mais
@@ -587,6 +828,9 @@ func _reset_for_serve(team: int) -> void:
 	rally_touches = 0
 	touches = 0
 	last_team = -1
+	last_kind = Act.NONE
+	blocks.clear()
+	block_plan = null
 	plan = null
 	plan_id += 1
 	_pending.clear()
