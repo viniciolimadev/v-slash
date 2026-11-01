@@ -133,7 +133,7 @@ jobs:
           name: volei-mobile-apk
           path: export/android/volei-mobile.apk
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main'
         with:
           path: export/web
