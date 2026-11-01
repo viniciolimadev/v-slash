@@ -12,6 +12,7 @@ var music: AudioStreamPlayer        # música do menu (a partida tem a sua, no S
 var telemetry: Telemetry            # estatísticas opcionais (só com consentimento)
 var http: HTTPRequest               # envio dos eventos
 var http_delete: HTTPRequest        # pedido de exclusão (separado: pode coincidir com um envio)
+var errors := ErrorWatch.new()      # erros de script em produção (RF-5.06)
 
 var _layer: CanvasLayer
 
@@ -25,6 +26,7 @@ func _ready() -> void:
 	Lang.apply(save.lang)
 	_setup_audio()
 	_setup_telemetry()
+	OS.add_logger(errors)
 	if "--autoplay" in OS.get_cmdline_user_args():
 		_open_match(MatchConfig.new())  # demo bot x bot direto, sem menus
 		return
@@ -35,9 +37,26 @@ func _ready() -> void:
 		show_title()
 
 
-func show_title() -> void:
+func _exit_tree() -> void:
+	OS.remove_logger(errors)
+
+
+## Erro de script: vai para a telemetria (com consentimento); no meio da partida, volta ao título.
+func _process(_delta: float) -> void:
+	var found := errors.take()
+	if found.is_empty():
+		return
+	for err in found:
+		telemetry.record(telemetry.error_event(err))
+	if match_node != null:
+		show_title(tr("Algo deu errado, sua partida não foi salva."))
+
+
+## notice = aviso numa linha acima dos botões (ex.: depois de um erro).
+func show_title(notice := "") -> void:
 	var s := TitleScreen.new()
 	s.save = save
+	s.notice = notice
 	s.play_pressed.connect(show_level_select)
 	s.tutorial_pressed.connect(func() -> void: start_tutorial(-1))
 	s.options_pressed.connect(func() -> void: show_options(show_title))

@@ -87,6 +87,14 @@ func tutorial_end(skipped: bool, fails_by_step: Array[int]) -> Dictionary:
 	return e
 
 
+## Erro de script (RF-5.06): só a mensagem e o arquivo:linha do código, nada do jogador.
+func error_event(err: Dictionary) -> Dictionary:
+	var e := base("error")
+	e["message"] = str(err.get("message", ""))
+	e["where"] = str(err.get("where", ""))
+	return e
+
+
 ## Evento de fim de partida (time 0 = você). Exatamente os campos de MATCH_FIELDS.
 func match_end(r: MatchResult) -> Dictionary:
 	var st := r.stats

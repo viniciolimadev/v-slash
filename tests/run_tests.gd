@@ -88,6 +88,8 @@ func _run() -> void:
 	_test_theme_targets()
 	print("== telemetria (opcional e anônima) ==")
 	_test_telemetry()
+	print("== erro em produção ==")
+	_test_error_recovery()
 	print("== idiomas ==")
 	_test_i18n()
 	print("== fluxo de telas (App) ==")
@@ -1853,6 +1855,42 @@ func _test_telemetry() -> void:
 	_check(back.consent == 0 and back.install_id == "" and tel.queue.is_empty(), "desligar apaga o id e para de registrar (save v5)")
 	for f in [path, qpath]:
 		DirAccess.remove_absolute(f)
+
+
+## RF-5.06: erro de script no meio da partida vira relatório (com consentimento) e volta ao título.
+func _test_error_recovery() -> void:
+	var path := "user://test_err.cfg"
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(path + ".queue.json")
+	var save := SaveData.new(path)
+	save.consent = 1
+	save.install_id = Telemetry.new_id()
+	save.tutorial_done = true
+	var app: Node = load("res://scenes/app.tscn").instantiate()
+	app.set("save", save)
+	root.add_child(app)
+	var tel: Telemetry = app.get("telemetry")
+	tel.queue.clear()
+	app.call("start_match", 0)
+	var watch: ErrorWatch = app.get("errors")
+	watch._log_error("tick", "drivers/gles3/x.cpp", 1, "driver", "", false, Logger.ERROR_TYPE_ERROR, [])
+	app.call("_process", DT)
+	_check(app.get("match_node") != null and tel.queue.is_empty(), "erro do motor (não do script) não derruba a partida")
+	watch._log_error("tick", "res://scripts/core/game.gd", 512, "Invalid access", "", false, Logger.ERROR_TYPE_SCRIPT, [])
+	app.call("_process", DT)
+	var scr = app.get("screen")
+	_check(app.get("match_node") == null and scr is TitleScreen and (scr as TitleScreen).notice != "" and not paused,
+			"erro de script na partida: volta ao título com aviso")
+	var ev: Dictionary = tel.queue[-1] if not tel.queue.is_empty() else {}
+	_check(ev.get("event") == "error" and str(ev.get("where")).begins_with("scripts/core/game.gd:512")
+			and not ev.has("sets"), "relatório de erro só com mensagem e arquivo:linha")
+	for i in 10:
+		watch._log_error("f", "res://scripts/x.gd", i, "loop", "", false, Logger.ERROR_TYPE_SCRIPT, [])
+	_check(watch.take().size() == ErrorWatch.MAX_PER_SESSION - 1, "no máximo %d relatórios por sessão" % ErrorWatch.MAX_PER_SESSION)
+	root.remove_child(app)
+	app.free()
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(path + ".queue.json")
 
 
 func _csv_strings() -> Dictionary:
