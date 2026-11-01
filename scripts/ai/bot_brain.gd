@@ -8,8 +8,9 @@ extends RefCounted
 var p: Player
 var game: Game
 var level := 1
-var home_x := 0.0                   # onde espera sem bola (x; o lado do time é aplicado em z)
-var home_z := 4.2                   # m da rede
+## Parceiro do humano no 2v2: só se posiciona. Quem toca é sempre quem você controla
+## (com o dedo no botão o controle não troca; ao soltar, o toque vai para quem tem o plano).
+var partner_mode := false
 var rng := RandomNumberGenerator.new()
 
 var _plan_seen := -1
@@ -47,8 +48,16 @@ func tick(_dt: float) -> void:
 		return              # 2v2: você está controlando este jogador agora
 	_apply_level()          # volta a jogar como bot depois de você largar o controle
 	p.move_input = Vector2.ZERO
+	if partner_mode:
+		p.holding = false
+		var plan := game.plan
+		if plan != null and plan.player == p and game.state == Game.State.PLAY:
+			_go_to(game.plan_view_pos(plan))
+		else:
+			_go_to(_idle_target(Game.side_of_team(p.team)))
+		return
 	var s := Game.side_of_team(p.team)
-	var home := Vector3(home_x, 0.0, s * home_z)
+	var home := _idle_target(s)
 
 	if game.state == Game.State.SERVE_WAIT or game.state == Game.State.SERVE_TOSS:
 		p.holding = false
@@ -160,6 +169,13 @@ func _block_tick(plan: ContactPlan) -> bool:
 	var x := plan.pos.x if plan.act == Game.Act.ATTACK else 0.0
 	_go_to(Vector3(x, 0.0, s * 0.6))
 	return true
+
+
+## Onde ficar sem bola: no 1v1, a base; no 2v2, a posição do papel (PartnerBrain).
+func _idle_target(s: float) -> Vector3:
+	if game.teams.size() > p.team and game.teams[p.team].players.size() > 1:
+		return PartnerBrain.target_for(p, game)
+	return Vector3(0.0, 0.0, s * 4.2)
 
 
 func _go_to(target: Vector3) -> void:

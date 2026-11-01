@@ -124,10 +124,8 @@ func _build_match() -> void:
 		if not autoplay:
 			# quando o controle passa para o parceiro, este jogador vira IA de parceiro
 			bots.append(BotBrain.new(human, game, Tuning.PARTNER_LEVEL))
-		# sem bola, cada um da dupla espera no seu lado da quadra (posições por papel: PartnerBrain)
-		for b in bots:
-			b.home_x = -1.8 if b.p == human or b.p == foe else 1.8
-			b.home_z = court_spec.depth * 0.6
+			for b in bots:
+				b.partner_mode = b.p.team == human.team
 	game.rules = MatchRules.new(0 if config.endless else Tuning.SET_POINTS).for_mode(config.mode)
 	game.setup(ball, players, bots)
 	game.set_bot_level(config.bot_level)

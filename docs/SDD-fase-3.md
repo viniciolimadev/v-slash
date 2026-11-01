@@ -290,3 +290,5 @@ Simulações novas: bot × bot 2v2 (Médio × Médio) e humano roteirizado com t
 | B3-5 | Sem troca de lado entre sets | trocar a cada 7 pontos como na praia |
 | B3-6 | `ATTACK_ZONES` e `SETTER_SPOT` continuam em metros da quadra do 1v1 e `CourtSpec.scaled()` multiplica pela razão entre as quadras (no 1v1 a razão é exatamente 1: mesmos números de antes, sem erro de arredondamento) | frações da quadra, como o esboço |
 | B3-7 | Comprimento da rede = `half_w + NET_OVERHANG` (0,7 m), para valer nos dois modos | `net_half_len` fixo por modo |
+| B3-8 | Com o dedo no botão o controle não troca; **ao soltar**, a troca pendente acontece e o toque vai para quem tem o plano (senão o gesto seria um "SEM BOLA" garantido). O parceiro do humano (`BotBrain.partner_mode`) só se posiciona, nunca toca | parceiro IA toca a bola dele enquanto você segura |
+| B3-9 | Na defesa, o jogador da frente espera a 2,0 m da rede (fora da `BLOCK_ZONE`) e só sobe para bloquear quando o bot decide bloquear (`BOT_BLOCK_CHANCE`); senão o Fácil bloquearia sempre | defensor da frente sempre na rede |

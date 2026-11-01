@@ -40,6 +40,8 @@ func _run() -> void:
 	_test_two_touch_rule()
 	print("== 2v2: troca de controle ==")
 	_test_control_switch()
+	print("== 2v2: posições do parceiro ==")
+	_test_partner_positions()
 	print("== plano de contato ==")
 	_test_contact_plan()
 	print("== HitResolver (mesmos números do código antigo) ==")
@@ -576,11 +578,75 @@ func _test_control_switch() -> void:
 	game.control_changed.connect(func(_p: Player) -> void: switches[0] += 1)
 	var pressed := false
 	for _i in int(180.0 / DT):
-		pressed = _script_human(game, game.human, pressed, true, Vector3(0.0, 0.0, -5.0))
+		pressed = _script_team_human(game, pressed)
 		game.tick(DT)
 	_check(bad[1] > 20 and bad[0] == 0, "só quem você controla toca do seu time (%d toques, %d do parceiro IA)" % [bad[1], bad[0]])
 	_check(switches[0] > 10, "o controle troca durante os rallies (%d trocas)" % switches[0])
 	_free_main(main)
+
+
+func _test_partner_positions() -> void:
+	var main := _make_main_2v2(true)
+	var game: Game = main.get("game")
+	var a: Player = game.teams[1].players[0]
+	var b: Player = game.teams[1].players[1]
+	var d := game.court.depth
+	# time 0 saca: a dupla do time 1 recebe lado a lado
+	var ta := PartnerBrain.target_for(a, game)
+	var tb := PartnerBrain.target_for(b, game)
+	_check(ta.x < -1.0 and tb.x > 1.0 and is_equal_approx(ta.z, tb.z) and absf(ta.z) > d * 0.5,
+			"recebendo o saque: lado a lado (%s, %s)" % [ta, tb])
+	game.state = Game.State.PLAY
+	game.last_team = 0
+	game.plan = ContactPlan.new(1, 1, Game.Act.RECEIVE, game.time + 1.0, Vector3(-2.0, 0.9, -5.0), a)
+	tb = PartnerBrain.target_for(b, game)
+	_check(absf(tb.z) < 2.5, "o colega recebe: o outro vai para o levantamento, perto da rede (%s)" % tb)
+	game.plan = ContactPlan.new(1, 2, Game.Act.SET_BALL, game.time + 1.0, Vector3(0.6, 2.2, -1.6), b)
+	ta = PartnerBrain.target_for(a, game)
+	_check(absf(ta.z) > 3.0 and absf(ta.z) < d * 0.6, "quem recebeu recua para a corrida do ataque (%s)" % ta)
+	# o time 0 vai atacar: um na frente, um no fundo
+	a.position = Vector3(-1.0, 0.0, -1.5)
+	b.position = Vector3(1.0, 0.0, -5.0)
+	game.plan = ContactPlan.new(0, 3, Game.Act.ATTACK, game.time + 1.0, Vector3(1.5, 3.05, 1.5), game.teams[0].players[0])
+	ta = PartnerBrain.target_for(a, game)
+	tb = PartnerBrain.target_for(b, game)
+	_check(absf(ta.z) <= PartnerBrain.FRONT_Z + 0.01 and absf(ta.x - 1.5) < 0.01 and absf(tb.z) >= d * 0.5,
+			"defesa: um na frente do atacante, um no fundo (%s, %s)" % [ta, tb])
+	_free_main(main)
+
+
+## Humano roteirizado do 2v2: joga com quem está controlado, solta no tempo e mira como uma
+## pessoa (recepção no levantador, levantamento padrão, ataque no fundo).
+func _script_team_human(game: Game, pressed: bool) -> bool:
+	var me := game.human
+	me.move_input = Vector2.ZERO
+	var act := _phase1_act(game, me)
+	if act == Game.Act.SERVE and game.state == Game.State.SERVE_WAIT:
+		if not pressed:
+			game.human_press(me)
+			_drag_to(game, me, Vector3(0.0, 0.0, -5.0))
+			return true
+		game.human_release(me)
+		return false
+	if act != Game.Act.NONE and game.plan != null and game.plan.player == me:
+		var at := game.plan_view_pos(game.plan)
+		var to := Vector2(at.x - me.position.x, at.z - me.position.z)
+		if to.length() > 0.1:
+			me.move_input = to.normalized() * clampf(to.length() / 0.5, 0.0, 1.0)
+		if not pressed and game.time >= game.plan.t - 0.5:
+			game.human_press(me)
+			var aim := game.default_aim(me)
+			if act == Game.Act.ATTACK or act == Game.Act.FREEBALL:
+				aim = Vector3(1.5, 0.0, -5.0)
+			_drag_to(game, me, aim)
+			return true
+		if pressed and game.time >= game.plan.t - DT * 0.5:
+			game.human_release(me)
+			return false
+		return pressed
+	if pressed:
+		game.human_release(me)
+	return false
 
 
 func _test_contact_plan() -> void:

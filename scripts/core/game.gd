@@ -416,6 +416,10 @@ func human_release(p: Player) -> void:
 	if not human_aiming:
 		return
 	human_aiming = false
+	# 2v2: a troca que esperou o dedo acontece agora, e o toque vai para quem tem a bola
+	_update_control()
+	if human != null and human.team == p.team:
+		p = human
 	attempt_hit(p, clamp_aim(p, human_aim))
 
 
