@@ -76,6 +76,8 @@ func highlight_zone(zone: String) -> void:
 func refresh() -> void:
 	if game == null:
 		return
+	if game.human != null:
+		human = game.human          # 2v2: o controle troca de jogador
 	var b := game.ball
 	var flying := b.mode == Ball.Mode.FLYING
 

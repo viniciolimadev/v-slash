@@ -38,6 +38,8 @@ func _run() -> void:
 	_test_serve_order()
 	print("== 2v2 bot x bot (20 min): ninguém toca duas vezes seguidas ==")
 	_test_two_touch_rule()
+	print("== 2v2: troca de controle ==")
+	_test_control_switch()
 	print("== plano de contato ==")
 	_test_contact_plan()
 	print("== HitResolver (mesmos números do código antigo) ==")
@@ -538,6 +540,46 @@ func _test_two_touch_rule() -> void:
 	_check((st["by"] as Dictionary).size() == 4, "os quatro jogadores tocam na bola")
 	_check(int(st["points"]) > 40 and float(st["gap"]) < 8.0, "partida anda e nunca trava")
 	_check(avg >= 3.0, "média de toques por rally >= 3 (%.1f)" % avg)
+	_free_main(main)
+
+
+func _test_control_switch() -> void:
+	var main := _make_main_2v2(false)
+	var game: Game = main.get("game")
+	var me: Player = main.get("human")
+	var partner: Player = main.get("partner")
+	_check(game.human == me and me.is_human and not partner.is_human, "começa controlando o seu jogador")
+	game.state = Game.State.PLAY
+	game.plan = ContactPlan.new(0, 1, Game.Act.RECEIVE, game.time + 1.0, partner.position, partner)
+	game.tick(DT)
+	_check(game.human == partner and partner.is_human and not me.is_human, "plano do parceiro: o controle passa para ele")
+	game.human_press(partner)
+	game.plan = ContactPlan.new(0, 2, Game.Act.SET_BALL, game.time + 1.0, me.position, me)
+	game.tick(DT)
+	_check(game.human == partner, "com o dedo no botão, não troca")
+	game.cancel_aim()
+	game.tick(DT)
+	_check(game.human == me and not partner.holding, "soltou: troca para quem vai tocar")
+	_free_main(main)
+
+	# rally com humano roteirizado (sempre no jogador controlado): o outro nunca toca
+	main = _make_main_2v2(false)
+	game = main.get("game")
+	game.rng.seed = 4
+	var bad := [0, 0]
+	game.touch_made.connect(func(p: Player, _g: String, _q: float) -> void:
+		if p.team == 0:
+			bad[1] += 1
+			if not p.is_human:
+				bad[0] += 1)
+	var switches := [0]
+	game.control_changed.connect(func(_p: Player) -> void: switches[0] += 1)
+	var pressed := false
+	for _i in int(180.0 / DT):
+		pressed = _script_human(game, game.human, pressed, true, Vector3(0.0, 0.0, -5.0))
+		game.tick(DT)
+	_check(bad[1] > 20 and bad[0] == 0, "só quem você controla toca do seu time (%d toques, %d do parceiro IA)" % [bad[1], bad[0]])
+	_check(switches[0] > 10, "o controle troca durante os rallies (%d trocas)" % switches[0])
 	_free_main(main)
 
 

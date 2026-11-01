@@ -44,7 +44,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	if not autoplay:
-		human.move_input = controls.get_move()
+		_me().move_input = controls.get_move()
 	game.tick(delta)
 	if tutorial != null:
 		tutorial.tick(delta)
@@ -52,8 +52,8 @@ func _physics_process(delta: float) -> void:
 
 func _process(_delta: float) -> void:
 	markers.refresh()
-	controls.action_label = game.action_label(human)
-	controls.action_hot = game.is_hot(human)
+	controls.action_label = game.action_label(_me())
+	controls.action_hot = game.is_hot(_me())
 	controls.queue_redraw()
 	hud.set_board(game.rules, game.rally_touches, game.best_rally)
 	hud.show_serve_picker(_can_pick_serve(), game.serve_type[human.team])
@@ -121,6 +121,9 @@ func _build_match() -> void:
 		players = [human, partner, foe, foe2]
 		bots.append(BotBrain.new(foe2, game, config.bot_level))
 		bots.append(BotBrain.new(partner, game, Tuning.PARTNER_LEVEL))
+		if not autoplay:
+			# quando o controle passa para o parceiro, este jogador vira IA de parceiro
+			bots.append(BotBrain.new(human, game, Tuning.PARTNER_LEVEL))
 		# sem bola, cada um da dupla espera no seu lado da quadra (posições por papel: PartnerBrain)
 		for b in bots:
 			b.home_x = -1.8 if b.p == human or b.p == foe else 1.8
@@ -130,6 +133,11 @@ func _build_match() -> void:
 	game.set_bot_level(config.bot_level)
 	game.aim_sens = config.aim_sens
 	game.serve_type[human.team] = config.serve_type
+	if two and not autoplay:
+		partner.set_ring(1, false)
+		game.control_changed.connect(func(p: Player) -> void:
+			for q in game.teams[p.team].players:
+				q.set_ring(2 if q == p else 1, q == p))
 	stats.attach(game)
 	markers = Markers.new()
 	add_child(markers)
@@ -181,6 +189,11 @@ func _build_ui() -> void:
 	game.match_over.connect(_on_match_over)
 
 
+## Quem você controla agora (no 2v2 muda durante o rally; no 1v1 é sempre `human`).
+func _me() -> Player:
+	return game.human if game.human != null else human
+
+
 func _setup_input() -> void:
 	_add_keys("move_left", [KEY_A, KEY_LEFT])
 	_add_keys("move_right", [KEY_D, KEY_RIGHT])
@@ -200,17 +213,17 @@ func _add_keys(action: String, keys: Array) -> void:
 
 func _on_action_pressed() -> void:
 	if not autoplay:
-		game.human_press(human)
+		game.human_press(_me())
 
 
 func _on_action_released() -> void:
 	if not autoplay:
-		game.human_release(human)
+		game.human_release(_me())
 
 
 func _on_aim_dragged(rel: Vector2) -> void:
 	if not autoplay:
-		game.human_drag(human, rel)
+		game.human_drag(_me(), rel)
 
 
 func _on_reset() -> void:
@@ -227,7 +240,7 @@ func _on_level() -> void:
 ## Escolher o saque só faz sentido parado no seu saque (no tutorial, não).
 func _can_pick_serve() -> bool:
 	return not autoplay and tutorial == null and game.state == Game.State.SERVE_WAIT \
-			and game.server == human and not game.human_aiming
+			and game.server == _me() and not game.human_aiming
 
 
 func _on_serve_type(kind: int) -> void:
@@ -240,12 +253,12 @@ func _on_serve_type(kind: int) -> void:
 
 func _on_served(p: Player, _kind: int, grade: String) -> void:
 	# saque com timing mostra a nota como os outros toques; por baixo não tem nota
-	if p == human and grade != "SAQUE":
+	if p == _me() and grade != "SAQUE":
 		hud.popup(grade, Color(0.45, 1.0, 0.55) if grade == "PERFEITO!" else Color(1.0, 0.95, 0.65))
 
 
 func _on_touch(p: Player, grade: String, quality: float) -> void:
-	if p != human or grade == "SAQUE":
+	if p != _me() or grade == "SAQUE":
 		return
 	var perfect := quality >= 1.0
 	hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65))
@@ -254,7 +267,7 @@ func _on_touch(p: Player, grade: String, quality: float) -> void:
 
 
 func _on_whiff(p: Player, why: String) -> void:
-	if p == human:
+	if p == _me():
 		hud.popup(why, Color(1.0, 0.45, 0.4))
 
 

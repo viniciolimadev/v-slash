@@ -13,6 +13,8 @@ signal served(player: Player, serve_kind: int, grade: String)
 ## DINK e DIVE não são planejados por _make_plan: são variações decididas na hora
 ## (DINK pela mira; DIVE pela distância até a bola).
 signal action_used(player: Player, act: int)
+## 2v2: o controle passou para outro jogador do seu time.
+signal control_changed(player: Player)
 
 ## SERVE_TOSS: bola lançada no saque flutuante/viagem, esperando o toque (Fase 2).
 enum State { SERVE_WAIT, PLAY, POINT_PAUSE, MATCH_OVER, SERVE_TOSS }
@@ -26,6 +28,7 @@ var ball: Ball
 var players: Array[Player] = []
 var teams: Array[Team] = []
 var bots: Array[BotBrain] = []
+## Jogador que você controla agora. No 2v2 troca sozinho para quem vai tocar (_update_control).
 var human: Player = null
 var rules := MatchRules.new(0)      # infinito por padrão; a partida de verdade troca por regras com sets
 var server_team := 0
@@ -117,6 +120,7 @@ func level_name() -> String:
 
 func tick(dt: float) -> void:
 	time += dt
+	_update_control()
 	for b in bots:
 		b.tick(dt)
 	for p in players:
@@ -137,6 +141,39 @@ func tick(dt: float) -> void:
 				rules.start_next_set()
 			_reset_for_serve(_next_server)
 	_update_assists()
+
+
+# ---------------------------------------------------------------- controle (2v2)
+
+## Você controla quem vai tocar: o sacador do seu time, o jogador do plano, o do bloqueio;
+## senão, mantém (com a bola do outro lado, fica quem tocou por último).
+## Nunca troca com o dedo no botão: a troca espera você soltar.
+func _update_control() -> void:
+	if human == null or human_aiming or teams.is_empty() or teams[human.team].players.size() < 2:
+		return
+	var t := human.team
+	var want := human
+	if state == State.SERVE_WAIT or state == State.SERVE_TOSS:
+		if server_team == t and server != null:
+			want = server
+	elif plan != null and plan.team == t and plan.player != null:
+		want = plan.player
+	elif block_plan != null and block_plan.team == t:
+		want = block_plan.player
+	if want != human:
+		set_control(want)
+
+
+func set_control(p: Player) -> void:
+	var old := human
+	old.is_human = false
+	old.holding = false
+	old.move_input = Vector2.ZERO
+	p.is_human = true
+	p.speed = Tuning.MOVE_SPEED
+	p.can_dive = true
+	human = p
+	control_changed.emit(p)
 
 
 # ---------------------------------------------------------------- consultas

@@ -33,11 +33,19 @@ func _init(player: Player, g: Game, lvl: int) -> void:
 
 func set_level(lvl: int) -> void:
 	level = clampi(lvl, 0, 2)
+	if not p.is_human:
+		_apply_level()
+
+
+func _apply_level() -> void:
 	p.speed = float(Tuning.BOT_SPEED[level])
 	p.can_dive = level >= 1             # o Fácil não faz peixinho
 
 
 func tick(_dt: float) -> void:
+	if p.is_human:
+		return              # 2v2: você está controlando este jogador agora
+	_apply_level()          # volta a jogar como bot depois de você largar o controle
 	p.move_input = Vector2.ZERO
 	var s := Game.side_of_team(p.team)
 	var home := Vector3(home_x, 0.0, s * home_z)
