@@ -64,7 +64,7 @@ func _ready() -> void:
 
 	_pause_btn = _make_button(root, "II")
 	_pause_btn.custom_minimum_size = Vector2(76.0, 64.0)
-	_pause_btn.add_theme_font_size_override("font_size", 28)
+	_pause_btn.add_theme_font_size_override("font_size", UiTheme.fs(28))
 	_pause_btn.size = _pause_btn.custom_minimum_size
 	_pause_btn.position = Vector2(14.0, 12.0)
 	_pause_btn.visible = false
@@ -95,7 +95,7 @@ func _ready() -> void:
 		b.focus_mode = Control.FOCUS_NONE
 		b.toggle_mode = true
 		b.button_group = group
-		b.add_theme_font_size_override("font_size", 17)
+		b.add_theme_font_size_override("font_size", UiTheme.fs(17))
 		b.add_theme_constant_override("outline_size", 4)
 		for st in ["normal", "hover", "pressed", "hover_pressed"]:
 			var sb := b.get_theme_stylebox(st).duplicate() as StyleBoxFlat
@@ -192,7 +192,7 @@ func _place_serve_box(mode: Mode) -> void:
 func _make_label(parent: Control, font_size: int, top: float, height: float) -> Label:
 	var l := Label.new()
 	var ls := LabelSettings.new()
-	ls.font_size = font_size
+	ls.font_size = UiTheme.fs(font_size)
 	ls.outline_size = maxi(4, int(font_size * 0.2))
 	ls.outline_color = UiTheme.INK
 	l.label_settings = ls
@@ -209,7 +209,7 @@ func _make_label(parent: Control, font_size: int, top: float, height: float) -> 
 func _plain_label(parent: Control, font_size: int) -> Label:
 	var l := Label.new()
 	var ls := LabelSettings.new()
-	ls.font_size = font_size
+	ls.font_size = UiTheme.fs(font_size)
 	ls.outline_size = maxi(4, int(font_size * 0.2))
 	ls.outline_color = UiTheme.INK
 	l.label_settings = ls
@@ -223,7 +223,7 @@ func _make_button(parent: Control, text: String) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_font_size_override("font_size", 22)
+	b.add_theme_font_size_override("font_size", UiTheme.fs(22))
 	b.custom_minimum_size = Vector2(190.0, 56.0)
 	parent.add_child(b)
 	return b

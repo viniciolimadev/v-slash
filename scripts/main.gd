@@ -164,7 +164,9 @@ func _build_match() -> void:
 		_attach_views(ball)
 	markers = Markers.new()
 	add_child(markers)
+	markers.colorblind = config.colorblind
 	markers.setup(game, human)
+	_show_numbers()
 	if config.tutorial:
 		tutorial = TutorialDirector.new()
 		tutorial.setup(game, human, markers)
@@ -411,6 +413,17 @@ func apply_options() -> void:
 	game.aim_sens = save.aim_sens
 	controls.left_handed = save.left_handed
 	controls.queue_redraw()
+	config.colorblind = save.colorblind
+	markers.colorblind = save.colorblind
+	_show_numbers()
+
+
+## Número nas costas dos jogadores só no modo daltônico.
+func _show_numbers() -> void:
+	for p in game.players:
+		for c in p.get_children():
+			if c is PlayerViewModel and (c as PlayerViewModel).number_label != null:
+				(c as PlayerViewModel).number_label.visible = config.colorblind
 
 
 func _open_options() -> void:

@@ -24,6 +24,8 @@ func _ready() -> void:
 	save.load_file()
 	Sfx.apply_volumes(save.music_vol, save.sfx_vol)
 	Lang.apply(save.lang)
+	UiTheme.install()
+	UiTheme.set_text_scale(save.text_scale)
 	_setup_audio()
 	_setup_telemetry()
 	OS.add_logger(errors)

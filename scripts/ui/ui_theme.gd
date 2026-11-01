@@ -10,6 +10,19 @@ const PANEL := Color(0.05, 0.16, 0.26, 0.86)   # placas (placar, faixas)
 const PRIMARY := Color(0.98, 0.5, 0.22)        # botões (laranja pôr do sol)
 const TOGGLED := Color(0.1, 0.62, 0.58)        # botão ligado (verde-água)
 const DISABLED := Color(0.36, 0.42, 0.48)
+const TEXT_SCALES := [1.0, 1.1, 1.25]           # opção "Texto" (RF-5.08)
+
+static var text_scale := 1.0                     # multiplica os tamanhos de fonte das telas e do HUD
+
+
+## Tamanho de fonte com a escala de texto do jogador.
+static func fs(size: float) -> int:
+	return roundi(size * text_scale)
+
+
+static func set_text_scale(s: float) -> void:
+	text_scale = s
+	ThemeDB.get_default_theme().default_font_size = fs(28)
 
 
 ## Instala uma vez (App e partida sozinha chamam; a segunda chamada não faz nada).

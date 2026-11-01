@@ -90,6 +90,8 @@ func _run() -> void:
 	_test_telemetry()
 	print("== erro em produção ==")
 	_test_error_recovery()
+	print("== acessibilidade ==")
+	_test_accessibility()
 	print("== idiomas ==")
 	_test_i18n()
 	print("== fluxo de telas (App) ==")
@@ -1891,6 +1893,48 @@ func _test_error_recovery() -> void:
 	app.free()
 	DirAccess.remove_absolute(path)
 	DirAccess.remove_absolute(path + ".queue.json")
+
+
+## RF-5.08: modo daltônico muda o padrão dos anéis por ação e mostra número na camisa;
+## texto 125% aumenta as fontes sem quebrar os alvos de toque.
+func _test_accessibility() -> void:
+	var cfg := MatchConfig.new()
+	cfg.colorblind = true
+	var main := _make_main_cfg(cfg)
+	var mk: Markers = main.get("markers")
+	var acts := [Game.Act.RECEIVE, Game.Act.SET_BALL, Game.Act.ATTACK, Game.Act.BLOCK]
+	var seen := {}
+	for a in acts:
+		seen[mk.pattern_for(a)] = true
+	_check(seen.size() == 4, "daltônico: receber, levantar, atacar e bloquear com padrões diferentes")
+	var num := _model_view(main.get("human")).number_label
+	_check(num != null and num.visible and num.text == "1", "daltônico: número nas costas")
+	_free_main(main)
+	main = _make_main(false)
+	mk = main.get("markers")
+	_check(mk.pattern_for(Game.Act.ATTACK) == 0 and not _model_view(main.get("human")).number_label.visible,
+			"sem o modo: anel cheio e sem número (como antes)")
+	_free_main(main)
+	var path := "user://test_a11y.cfg"
+	var sv := SaveData.new(path)
+	sv.colorblind = true
+	sv.text_scale = 1.25
+	sv.save_file()
+	var back := SaveData.new(path)
+	back.load_file()
+	_check(back.colorblind and back.text_scale == 1.25, "daltônico e texto 125% gravados (save v5)")
+	UiTheme.set_text_scale(1.25)
+	var t := TitleScreen.new()
+	root.add_child(t)
+	var title_size := (t.column.get_child(0) as Label).label_settings.font_size
+	var small := 0
+	for b in _buttons(t):
+		if b.get_combined_minimum_size().y < 64.0:
+			small += 1
+	_check(title_size == roundi(64 * 1.25) and small == 0, "texto 125%%: título com %d px, botões ainda ≥ 64 px" % title_size)
+	t.free()
+	UiTheme.set_text_scale(1.0)
+	DirAccess.remove_absolute(path)
 
 
 func _csv_strings() -> Dictionary:

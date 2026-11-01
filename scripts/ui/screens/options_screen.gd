@@ -37,6 +37,16 @@ func _build() -> void:
 	_slider(tr("Efeitos"), "sfx", 0.0, 1.0, save.sfx_vol, func(v: float) -> void:
 		save.sfx_vol = v
 		Sfx.apply_volumes(save.music_vol, save.sfx_vol))
+	_toggle(tr("Modo daltônico"), "colorblind", save.colorblind, func(on: bool) -> void: save.colorblind = on)
+	var scale_btn := add_button("", "text", func() -> void: pass)
+	var show_scale := func() -> void: scale_btn.text = "%s: %d%%" % [tr("Texto"), roundi(save.text_scale * 100.0)]
+	show_scale.call()
+	scale_btn.pressed.connect(func() -> void:
+		var i := UiTheme.TEXT_SCALES.find(save.text_scale)
+		save.text_scale = UiTheme.TEXT_SCALES[(i + 1) % UiTheme.TEXT_SCALES.size()]
+		UiTheme.set_text_scale(save.text_scale)
+		save.save_file()
+		lang_changed.emit())             # remonta a tela com o tamanho novo
 	column = right
 	add_button("%s: %s" % [tr("Idioma"), Lang.NAMES[Lang.resolve(save.lang)]], "lang", func() -> void:
 		save.lang = Lang.next(save.lang)
