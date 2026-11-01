@@ -78,6 +78,8 @@ func _run() -> void:
 	_test_app_flow()
 	print("== duração: humano casual x Fácil ==")
 	_test_match_duration()
+	print("== 2v2: duração humano casual x Fácil e rally x Médio ==")
+	_test_match_duration_2v2()
 	print("falhas: %d" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -541,8 +543,12 @@ func _test_two_touch_rule() -> void:
 		st["touches"] += game.rally_touches
 		st["prev"] = null
 		mark.call())
-	for _i in int(1200.0 / DT):
+	var roles := {}
+	for i in int(1200.0 / DT):
 		game.tick(DT)
+		if i % 30 == 0:
+			for p in game.players:
+				roles[PartnerBrain.Role.keys()[PartnerBrain.role_of(p, game)]] = true
 	var avg := float(st["touches"]) / maxf(float(st["points"]), 1.0)
 	print("  pontos=%d  placar=%d x %d  média de toques=%.1f  toques por jogador=%s  maior tempo sem evento=%.1f s" % [
 			st["points"], game.rules.points[0], game.rules.points[1], avg, (st["by"] as Dictionary).values(), st["gap"]])
@@ -550,6 +556,9 @@ func _test_two_touch_rule() -> void:
 	_check((st["by"] as Dictionary).size() == 4, "os quatro jogadores tocam na bola")
 	_check(int(st["points"]) > 40 and float(st["gap"]) < 8.0, "partida anda e nunca trava")
 	_check(avg >= 3.0, "média de toques por rally >= 3 (%.1f)" % avg)
+	var want_roles := ["SERVE_PARTNER", "RECEIVE", "SETTER_PREP", "ATTACKER", "COVER", "FRONT", "DIGGER"]
+	var missing := want_roles.filter(func(r: String) -> bool: return not roles.has(r))
+	_check(missing.is_empty(), "todos os papéis de posição aparecem (faltou: %s)" % [missing])
 	_free_main(main)
 
 
@@ -1606,6 +1615,114 @@ func _test_match_duration() -> void:
 		avg += mm / minutes.size()
 	# RNF-1.01 (DP-05): melhor de 3 sets de 15 dá ~6–7 min em 2 sets e ~9–11 min em 3 sets
 	_check(avg >= 6.0 and avg <= 9.0, "partida casual x Fácil dura 6–9 min em média (%.1f min)" % avg)
+
+
+## Um quadro do humano casual (reação, erro de timing, mira em zona sorteada), jogando com quem
+## está controlado. `st` guarda o estado entre quadros.
+func _casual_step(game: Game, st: Dictionary, rng: RandomNumberGenerator, zones: Array) -> void:
+	var me := game.human
+	me.move_input = Vector2.ZERO
+	var act := _phase1_act(game, me)
+	if act == Game.Act.SERVE and game.state == Game.State.SERVE_WAIT:
+		st["serve_t"] = float(st["serve_t"]) + DT
+		if not st["pressed"] and float(st["serve_t"]) > 0.8:
+			game.human_press(me)
+			_drag_to(game, me, zones[rng.randi() % zones.size()]["pos"])
+			st["pressed"] = true
+		elif st["pressed"] and float(st["serve_t"]) > 1.1:
+			game.human_release(me)
+			st["pressed"] = false
+			st["serve_t"] = 0.0
+	elif act != Game.Act.NONE and game.plan != null and game.plan.player == me:
+		var plan := game.plan
+		if game.plan_id != int(st["seen"]):
+			st["seen"] = game.plan_id
+			st["react"] = game.time + (float(st["reaction"]) if plan.n == 1 else 0.05)
+			st["release"] = plan.t + rng.randfn(0.0, float(st["sigma"]))
+		if game.time >= float(st["react"]):
+			var at := game.plan_view_pos(plan)
+			var to := Vector2(at.x - me.position.x, at.z - me.position.z)
+			if to.length() > 0.1:
+				me.move_input = to.normalized() * clampf(to.length() / 0.5, 0.0, 1.0)
+			if not st["pressed"] and game.time >= float(st["release"]) - 0.5:
+				game.human_press(me)
+				var aim := game.default_aim(me)
+				if plan.act == Game.Act.ATTACK or plan.act == Game.Act.FREEBALL:
+					aim = zones[rng.randi() % zones.size()]["pos"]
+				_drag_to(game, me, aim)
+				st["pressed"] = true
+			elif st["pressed"] and game.time >= float(st["release"]):
+				game.human_release(me)
+				st["pressed"] = false
+	elif st["pressed"]:
+		game.human_release(me)
+		st["pressed"] = false
+
+
+func _new_casual(reaction: float, sigma: float) -> Dictionary:
+	return {"seen": -1, "react": 0.0, "release": 0.0, "pressed": false, "serve_t": 0.0,
+			"reaction": reaction, "sigma": sigma}
+
+
+func _test_match_duration_2v2() -> void:
+	var minutes: Array[float] = []
+	var won := 0
+	for seed in [3, 5, 7, 9, 11, 13, 17, 19]:
+		var cfg := MatchConfig.new()
+		cfg.mode = MatchConfig.Mode.TWO_V_TWO
+		cfg.endless = false
+		var main := _make_main_cfg(cfg)
+		var game: Game = main.get("game")
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed
+		game.rng.seed = seed
+		for b in game.bots:
+			b.rng.seed = seed + b.p.get_index()
+		var zones := game.aim_magnets(game.human, Game.Act.SERVE)
+		var st := _new_casual(0.4, 0.09)
+		var t0 := game.time
+		while game.state != Game.State.MATCH_OVER and game.time - t0 < 3600.0:
+			_casual_step(game, st, rng, zones)
+			game.tick(DT)
+		var mins := (game.time - t0) / 60.0
+		minutes.append(mins)
+		if game.rules.winner == 0:
+			won += 1
+		print("  semente %d: %s  %s  %.1f min" % [seed, "venceu" if game.rules.winner == 0 else "perdeu",
+				game.rules.history, mins])
+		_free_main(main)
+	var avg := 0.0
+	for mm in minutes:
+		avg += mm / minutes.size()
+	print("  vence %d de 8" % won)
+	_check(avg >= 6.0 and avg <= 9.0, "2v2: partida casual x Fácil dura 6–9 min em média (%.1f min)" % avg)
+
+	# RNF-3.03: rally médio do humano (bom) contra o Médio no 2v2 >= no 1v1
+	var avgs := []
+	for two in [false, true]:
+		var c := MatchConfig.new()
+		c.mode = MatchConfig.Mode.TWO_V_TWO if two else MatchConfig.Mode.ONE_V_ONE
+		c.bot_level = 1
+		var main := _make_main_cfg(c)
+		var game: Game = main.get("game")
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 23
+		game.rng.seed = 23
+		for b in game.bots:
+			b.rng.seed = 23 + b.p.get_index()
+		var zones := game.aim_magnets(game.human, Game.Act.SERVE)
+		var st := _new_casual(0.25, 0.05)
+		var tot := [0, 0]
+		game.point_scored.connect(func(_t: int, _w: String) -> void:
+			tot[0] += game.rally_touches
+			tot[1] += 1)
+		for _i in int(600.0 / DT):
+			_casual_step(game, st, rng, zones)
+			game.tick(DT)
+		avgs.append(float(tot[0]) / maxf(tot[1], 1.0))
+		_free_main(main)
+	print("  rally médio x Médio: 1v1 %.1f toques  ·  2v2 %.1f toques" % avgs)
+	_check(avgs[1] >= avgs[0], "2v2: rally médio x Médio >= 1v1")
 
 
 func _drag_to(game: Game, human: Player, target: Vector3) -> void:

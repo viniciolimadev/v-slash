@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Volei Mobile"
-config/description="Fase 2: saque com timing (por baixo, flutuante, viagem), bloqueio, largada, peixinho e stamina (flag)."
+config/description="Fase 3: modo 2v2 com parceiro IA e troca automática de controle; 1v1 com saques, bloqueio, largada e peixinho."
 run/main_scene="res://scenes/app.tscn"
 config/quit_on_go_back=false
 config/features=PackedStringArray("4.7", "GL Compatibility")

@@ -40,6 +40,8 @@ func set_level(lvl: int) -> void:
 
 func _apply_level() -> void:
 	p.speed = float(Tuning.BOT_SPEED[level])
+	if game.teams.size() > p.team and game.teams[p.team].players.size() > 1:
+		p.speed *= Tuning.BOT_SPEED_2V2      # dois cobrindo a quadra: cada um corre menos
 	p.can_dive = level >= 1             # o Fácil não faz peixinho
 
 

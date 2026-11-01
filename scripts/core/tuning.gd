@@ -136,6 +136,7 @@ const SETTER_SPOT := Vector2(0.8, 1.6)   # (x, z) do levantamento do time 0 no 1
 # --- Bot: índice 0 = fácil, 1 = médio, 2 = difícil ---
 const BOT_NAMES := ["Fácil", "Médio", "Difícil"]
 const PARTNER_LEVEL := 1           # seu parceiro no 2v2 joga como o Médio
+const BOT_SPEED_2V2 := 0.9         # multiplica BOT_SPEED no 2v2 (dois cobrem a quadra; rally menor)
 const BOT_SPEED := [4.6, 5.4, 6.0]
 const BOT_REACTION := [0.4, 0.3, 0.22]
 const BOT_TIMING_SIGMA := [0.13, 0.08, 0.045]

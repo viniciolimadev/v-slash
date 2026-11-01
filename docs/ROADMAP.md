@@ -51,7 +51,9 @@ Design detalhado: [SDD-fase-2.md](SDD-fase-2.md).
 
 ---
 
-## Fase 3 — 2v2
+## Fase 3 — 2v2 ✅ (falta o teste no celular)
+
+Implementada em 2026-10-31 (versão 0.4.0): quadra por modo, dupla com ordem de saque e regra dos toques seguidos, troca automática de controle, IA de posição por papel, levantamento para o parceiro, câmera do 2v2, escolha de modo e save v3. Números: [SDD-fase-3.md, seção 10](SDD-fase-3.md#10-resultado-fim-da-fase).
 
 **Meta:** o jogo de dupla, com parceiro IA e a regra real (ninguém toca duas vezes seguidas).
 Design detalhado: [SDD-fase-3.md](SDD-fase-3.md).
