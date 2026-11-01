@@ -42,6 +42,8 @@ func _run() -> void:
 	_test_control_switch()
 	print("== 2v2: posições do parceiro ==")
 	_test_partner_positions()
+	print("== 2v2: levantamento para o parceiro ==")
+	_test_sets_2v2()
 	print("== plano de contato ==")
 	_test_contact_plan()
 	print("== HitResolver (mesmos números do código antigo) ==")
@@ -647,6 +649,34 @@ func _script_team_human(game: Game, pressed: bool) -> bool:
 	if pressed:
 		game.human_release(me)
 	return false
+
+
+func _test_sets_2v2() -> void:
+	var main := _make_main_2v2(false)
+	var game: Game = main.get("game")
+	game.bots.clear()
+	var me: Player = main.get("human")
+	var partner: Player = main.get("partner")
+	game.state = Game.State.PLAY
+	game.last_team = 0
+	game.last_player = partner
+	game.touches = 1
+	var at := Vector3(0.6, Tuning.H_SET, 1.6)
+	me.position = Vector3(at.x, 0.0, at.z)
+	partner.position = Vector3(2.0, 0.0, 4.0)
+	game.ball.launch(at, Vector3.ZERO)
+	game.plan = ContactPlan.new(0, 2, Game.Act.SET_BALL, game.time, at, me)
+	var hit_x := PartnerBrain.target_for(partner, game).x
+	var alta: Vector3 = game.set_magnets(0)[0]["pos"]
+	_check(game.set_receiver(0) == partner and absf(alta.x - hit_x) < 0.01 and absf(alta.z - 1.2) < 0.01,
+			"ALTA fica na frente do atacante (%s; atacante em x=%.1f)" % [alta, hit_x])
+	_check(game.default_aim(me).is_equal_approx(alta), "levantamento padrão = ALTA do parceiro")
+	game._execute(me, alta, 0.0, 1.0)
+	_check(game.plan != null and game.plan.player == partner and game.plan.act == Game.Act.ATTACK,
+			"depois do levantamento, o 3º toque é do parceiro")
+	game.tick(DT)
+	_check(game.human == partner, "e o controle passa para ele")
+	_free_main(main)
 
 
 func _test_contact_plan() -> void:

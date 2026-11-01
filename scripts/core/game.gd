@@ -297,6 +297,17 @@ func opponent_of(team: int) -> Player:
 ## Alvos do levantamento com ímã. ALTA = bola alta na sua frente (padrão).
 func set_magnets(team: int) -> Array:
 	var s := side_of_team(team)
+	var hitter := set_receiver(team)
+	if hitter != null:
+		# 2v2: os alvos são relativos a quem vai atacar (o parceiro de quem levanta)
+		var x := clampf(PartnerBrain.target_for(hitter, self).x, -court.half_w + 0.8, court.half_w - 0.8)
+		var edge := signf(x) if absf(x) > 0.1 else -s
+		return [
+			{"name": "ALTA", "pos": Vector3(x, 0.0, s * 1.2), "quick": false},
+			{"name": "PONTA", "pos": Vector3(edge * (court.half_w - 0.8), 0.0, s * 1.0), "quick": false},
+			{"name": "MEIO", "pos": Vector3(0.0, 0.0, s * 1.0), "quick": true},
+			{"name": "FUNDO", "pos": Vector3(x, 0.0, s * 3.0), "quick": false},
+		]
 	return [
 		{"name": "ALTA", "pos": _high_set_point(team), "quick": false},
 		{"name": "PONTA", "pos": Vector3(-2.6 * s, 0.0, 1.0 * s), "quick": false},
@@ -786,8 +797,18 @@ func _choose_player(team: int, at: Vector3, n: int) -> Player:
 	return best
 
 
+## 2v2: quem vai receber o levantamento do time (o parceiro de quem levanta); null no 1v1.
+func set_receiver(team: int) -> Player:
+	if teams.size() <= team or teams[team].players.size() < 2 or plan == null or plan.team != team \
+			or plan.act != Act.SET_BALL:
+		return null
+	return teams[team].other(plan.player)
+
+
 func _high_set_point(team: int) -> Vector3:
 	var s := side_of_team(team)
+	if set_receiver(team) != null:
+		return set_magnets(team)[0]["pos"]
 	var base := spot(team, Tuning.SETTER_SPOT)
 	if plan != null and plan.team == team:
 		base = plan.pos
