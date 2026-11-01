@@ -5,6 +5,7 @@ extends Screen
 
 signal changed
 signal closed
+signal lang_changed
 
 var save: SaveData
 
@@ -14,7 +15,7 @@ func _init() -> void:
 
 
 func _build() -> void:
-	add_title("OPÇÕES", 48)
+	add_title(tr("OPÇÕES"), 48)
 	# duas colunas (cabe em 720p): controles deslizantes à esquerda, chaves e Voltar à direita
 	var top := column
 	var row := HBoxContainer.new()
@@ -27,18 +28,23 @@ func _build() -> void:
 	right.add_theme_constant_override("separation", int(GAP))
 	row.add_child(right)
 	column = left
-	_slider("Sensibilidade da mira", "sens", SaveData.AIM_SENS_MIN, SaveData.AIM_SENS_MAX, save.aim_sens,
+	_slider(tr("Sensibilidade da mira"), "sens", SaveData.AIM_SENS_MIN, SaveData.AIM_SENS_MAX, save.aim_sens,
 			func(v: float) -> void: save.aim_sens = v)
-	_slider("Música", "music", 0.0, 1.0, save.music_vol, func(v: float) -> void:
+	_slider(tr("Música"), "music", 0.0, 1.0, save.music_vol, func(v: float) -> void:
 		save.music_vol = v
 		Sfx.apply_volumes(save.music_vol, save.sfx_vol))
-	_slider("Efeitos", "sfx", 0.0, 1.0, save.sfx_vol, func(v: float) -> void:
+	_slider(tr("Efeitos"), "sfx", 0.0, 1.0, save.sfx_vol, func(v: float) -> void:
 		save.sfx_vol = v
 		Sfx.apply_volumes(save.music_vol, save.sfx_vol))
 	column = right
-	_toggle("Modo canhoto", "left", save.left_handed, func(on: bool) -> void: save.left_handed = on)
-	_toggle("Vibração", "vibration", save.vibration, func(on: bool) -> void: save.vibration = on)
-	add_button("VOLTAR", "back", func() -> void:
+	add_button("%s: %s" % [tr("Idioma"), Lang.NAMES[Lang.resolve(save.lang)]], "lang", func() -> void:
+		save.lang = Lang.next(save.lang)
+		Lang.apply(save.lang)
+		save.save_file()
+		lang_changed.emit())
+	_toggle(tr("Modo canhoto"), "left", save.left_handed, func(on: bool) -> void: save.left_handed = on)
+	_toggle(tr("Vibração"), "vibration", save.vibration, func(on: bool) -> void: save.vibration = on)
+	add_button(tr("VOLTAR"), "back", func() -> void:
 		save.save_file()
 		closed.emit())
 
@@ -69,7 +75,7 @@ func _toggle(text: String, key: String, on: bool, apply: Callable) -> void:
 	b.toggle_mode = true
 	b.button_pressed = on
 	var label_for := func(v: bool) -> void:
-		b.text = "%s: %s" % [text, "LIGADO" if v else "DESLIGADO"]
+		b.text = "%s: %s" % [text, tr("LIGADO") if v else tr("DESLIGADO")]
 	label_for.call(on)
 	b.toggled.connect(func(v: bool) -> void:
 		apply.call(v)

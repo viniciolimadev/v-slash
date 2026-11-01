@@ -86,6 +86,8 @@ func _run() -> void:
 	_test_tutorial()
 	print("== tema: alvos de toque ==")
 	_test_theme_targets()
+	print("== idiomas ==")
+	_test_i18n()
 	print("== fluxo de telas (App) ==")
 	_test_app_flow()
 	print("== duração: humano casual x Fácil ==")
@@ -1786,6 +1788,107 @@ func _test_theme_targets() -> void:
 	pm.free()
 	root.remove_child(app)
 	app.free()
+	DirAccess.remove_absolute(path)
+
+
+func _csv_strings() -> Dictionary:
+	var out := {}
+	var f := FileAccess.open("res://assets/i18n/strings.csv", FileAccess.READ)
+	var head := f.get_csv_line()
+	while not f.eof_reached():
+		var row := f.get_csv_line()
+		if row.size() >= 3 and row[0] != "":
+			out[row[0]] = {"pt": row[head.find("pt_BR")], "en": row[head.find("en")]}
+	return out
+
+
+func _gd_files(dir: String, out: Array[String]) -> Array[String]:
+	for f in DirAccess.get_files_at(dir):
+		if f.ends_with(".gd"):
+			out.append(dir.path_join(f))
+	for d in DirAccess.get_directories_at(dir):
+		_gd_files(dir.path_join(d), out)
+	return out
+
+
+func _texts(n: Node, out: Array[String]) -> Array[String]:
+	if (n is Label or n is Button) and n.is_visible_in_tree():
+		out.append(str(n.get("text")))
+	for c in n.get_children():
+		_texts(c, out)
+	return out
+
+
+## RF-5.07: toda chave tem pt e en; todo texto do jogo passa por tr(); telas em inglês sem português.
+func _test_i18n() -> void:
+	var strings := _csv_strings()
+	var empty: Array[String] = []
+	for k in strings:
+		if str(strings[k]["pt"]) == "" or str(strings[k]["en"]) == "":
+			empty.append(k)
+	_check(strings.size() > 60 and empty.is_empty(), "%d chaves, todas com pt e en (sem: %s)" % [strings.size(), empty])
+	# chaves usadas no código (tr("...")) e nas tabelas mostradas na tela
+	var used: Array[String] = []
+	var rx := RegEx.create_from_string('tr\\("((?:[^"\\\\]|\\\\.)*)"\\)')
+	var lint := RegEx.create_from_string('\\b(add_title|add_line|add_button|banner|message|popup|_say|_toggle|_slider)\\("([^"]*)"')
+	var fmt := RegEx.create_from_string('%[-0-9.]*[a-z]|\\bBot\\b|VÔLEI MOBILE')     # formatos, "Bot" e a marca não traduzem
+	var letter := RegEx.create_from_string('[A-Za-zÀ-ú]')
+	var raw: Array[String] = []
+	for path in _gd_files("res://scripts", []):
+		var src := FileAccess.get_file_as_string(path)
+		for m in rx.search_all(src):
+			used.append(m.get_string(1))
+		if path.contains("/ui/") or path.contains("/tutorial/") or path.ends_with("main.gd"):
+			for m in lint.search_all(src):
+				if letter.search(fmt.sub(m.get_string(2), "", true)) != null:
+					raw.append("%s: %s" % [path.get_file(), m.get_string(0)])
+	for list in [Tuning.BOT_NAMES, ServeType.NAMES, TutorialDirector.TEXTS, TutorialDirector.HINTS]:
+		for k in list:
+			used.append(str(k))
+	for k in Game.ACT_LABELS:
+		used.append(str(k))
+	for z in Tuning.ATTACK_ZONES:
+		used.append(str(z[0]))
+	for k in ["Saque perdido", "Fora (antena)", "Bola no chão", "Rede", "Fora", "ALTA", "PONTA", "RÁPIDA", "PIPE", "LEVANTADOR",
+			"PERFEITO!", "BOM", "CEDO", "TARDE", "LONGE", "SEM BOLA"]:
+		used.append(k)
+	var missing: Array[String] = []
+	for k in used:
+		if k != "" and not strings.has(k) and not missing.has(k):
+			missing.append(k)
+	_check(missing.is_empty(), "todo texto traduzível tem linha no strings.csv (faltam: %s)" % [missing])
+	_check(raw.is_empty(), "nenhum texto literal na tela fora de tr() (achados: %s)" % [raw])
+	# telas em inglês: nenhum texto em português que tem tradução diferente
+	_check(Lang.resolve("", "pt") == "pt_BR" and Lang.resolve("", "es") == "en" and Lang.resolve("en", "pt") == "en",
+			"idioma: aparelho em português → pt_BR, outro → en, escolha manual vale")
+	TranslationServer.set_locale("en")
+	_check(tr("JOGAR") == "PLAY" and tr("Bola no chão") == "Ball down", "tradução carregada (JOGAR → PLAY)")
+	var path := "user://test_i18n.cfg"
+	DirAccess.remove_absolute(path)
+	var app: Node = load("res://scenes/app.tscn").instantiate()
+	var save := SaveData.new(path)
+	save.lang = "en"
+	app.set("save", save)
+	root.add_child(app)
+	var pt_left: Array[String] = []
+	var st := MatchStats.new()
+	st.points_by_reason = [{"Bola no chão": 3}, {}]
+	for open in [func() -> void: app.call("show_title"), func() -> void: app.call("show_level_select"),
+			func() -> void: app.call("show_options", func() -> void: pass),
+			func() -> void: app.call("show_result", MatchResult.new(0, 0, [Vector2i(15, 9)], st))]:
+		open.call()
+		for t in _texts(app.get("screen"), []):
+			for k in strings:
+				if strings[k]["pt"] != strings[k]["en"] and str(k).length() > 3 and t.contains(str(strings[k]["pt"]).replace("%s", "").replace("%d", "").strip_edges()) \
+						and not t.contains(str(strings[k]["en"]).replace("%s", "").replace("%d", "").strip_edges()):
+					pt_left.append(t)
+	_check(pt_left.is_empty() and TranslationServer.get_locale() == "en", "telas em inglês sem texto em português (achados: %s)" % [pt_left])
+	root.remove_child(app)
+	app.free()
+	var back := SaveData.new(path)
+	back.load_file()
+	_check(back.lang == "", "idioma automático por padrão (save novo)")
+	TranslationServer.set_locale("pt_BR")
 	DirAccess.remove_absolute(path)
 
 

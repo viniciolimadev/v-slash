@@ -62,7 +62,7 @@ func _physics_process(delta: float) -> void:
 
 func _process(_delta: float) -> void:
 	markers.refresh()
-	controls.action_label = game.action_label(_me())
+	controls.action_label = tr(game.action_label(_me()))
 	controls.action_act = game.current_act(_me())
 	controls.action_hot = game.is_hot(_me())
 	controls.queue_redraw()
@@ -199,7 +199,7 @@ func _attach_views(ball: Ball) -> void:
 func _show_first_hint() -> void:
 	if config.mode != MatchConfig.Mode.TWO_V_TWO or autoplay or save == null or save.hint_2v2_done:
 		return
-	hud.banner("O controle passa para quem vai tocar na bola", Color(1.0, 0.95, 0.65), Tuning.HINT_SECS)
+	hud.banner(tr("O controle passa para quem vai tocar na bola"), Color(1.0, 0.95, 0.65), Tuning.HINT_SECS)
 	save.hint_2v2_done = true
 	save.save_file()
 
@@ -313,14 +313,14 @@ func _on_served(p: Player, _kind: int, grade: String) -> void:
 	# saque com timing mostra a nota como os outros toques; por baixo não tem nota
 	if p == _me() and grade != "SAQUE":
 		var perfect := grade == "PERFEITO!"
-		hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65), perfect)
+		hud.popup(tr(grade), Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65), perfect)
 
 
 func _on_touch(p: Player, grade: String, quality: float) -> void:
 	if p != _me() or grade == "SAQUE":
 		return
 	var perfect := quality >= 1.0
-	hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65), perfect)
+	hud.popup(tr(grade), Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65), perfect)
 	if game.last_kind == Game.Act.BLOCK:
 		_vibrate(Tuning.VIBRATE_BLOCK)
 	else:
@@ -337,28 +337,28 @@ func _vibrate(ms: int, times := 1) -> void:
 
 func _on_whiff(p: Player, why: String) -> void:
 	if p == _me():
-		hud.popup(why, Color(1.0, 0.45, 0.4))
+		hud.popup(tr(why), Color(1.0, 0.45, 0.4))
 
 
 func _on_point(team: int, reason: String) -> void:
 	if court_view != null:
 		court_view.react(0.0, 1.2)
 	if team == human.team:
-		hud.message("Ponto seu! " + reason, Color(0.55, 1.0, 0.65))
+		hud.message(tr("Ponto seu! %s") % tr(reason), Color(0.55, 1.0, 0.65))
 		_vibrate(Tuning.VIBRATE_POINT, 2)
 	else:
-		hud.message("Ponto do bot. " + reason, Color(1.0, 0.62, 0.52))
+		hud.message(tr("Ponto do bot. %s") % tr(reason), Color(1.0, 0.62, 0.52))
 
 
 func _on_set_over(team: int, set_index: int, final: Vector2i) -> void:
 	if game.rules.winner >= 0:
 		return              # último set: a faixa de fim de partida cobre
-	hud.banner("Fim do %dº set — %d × %d" % [set_index + 1, final.x, final.y],
+	hud.banner(tr("Fim do %dº set — %d × %d") % [set_index + 1, final.x, final.y],
 			_team_color(team), Tuning.SET_PAUSE)
 
 
 func _on_match_over(team: int) -> void:
-	var text := "VOCÊ VENCEU!" if team == human.team else "O BOT VENCEU"
+	var text := tr("VOCÊ VENCEU!" if team == human.team else "O BOT VENCEU")
 	hud.banner(text, _team_color(team), 3600.0)
 	get_tree().create_timer(Tuning.MATCH_END_DELAY).timeout.connect(finish_match)
 
@@ -424,6 +424,9 @@ func _open_options() -> void:
 	var scr := OptionsScreen.new()
 	scr.save = save
 	scr.changed.connect(apply_options)
+	scr.lang_changed.connect(func() -> void:
+		_close_options()
+		_open_options())
 	scr.closed.connect(func() -> void:
 		_close_options()
 		pause_menu.open(true))

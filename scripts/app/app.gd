@@ -19,6 +19,7 @@ func _ready() -> void:
 	add_child(_layer)
 	save.load_file()
 	Sfx.apply_volumes(save.music_vol, save.sfx_vol)
+	Lang.apply(save.lang)
 	_setup_audio()
 	if "--autoplay" in OS.get_cmdline_user_args():
 		_open_match(MatchConfig.new())  # demo bot x bot direto, sem menus
@@ -47,6 +48,8 @@ func show_options(back: Callable) -> void:
 	var s := OptionsScreen.new()
 	s.save = save
 	s.closed.connect(back)
+	# trocar o idioma remonta a tela para os textos mudarem na hora
+	s.lang_changed.connect(func() -> void: show_options(back))
 	_show(s)
 
 

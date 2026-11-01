@@ -1,0 +1,85 @@
+keys,pt_BR,en
+Recorde de rally: %d toques,Recorde de rally: %d toques,Best rally: %d touches
+JOGAR,JOGAR,PLAY
+TUTORIAL,TUTORIAL,TUTORIAL
+OPÇÕES,OPÇÕES,OPTIONS
+SOBRE,SOBRE,ABOUT
+ESCOLHA O BOT,ESCOLHA O BOT,CHOOSE YOUR OPPONENT
+%s   ·   %dV  %dD,%s   ·   %dV  %dD,%s   ·   %dW  %dL
+%s   ·   vença o %s,%s   ·   vença o %s,%s   ·   beat %s
+VOLTAR,VOLTAR,BACK
+Fácil,Fácil,Easy
+Médio,Médio,Medium
+Difícil,Difícil,Hard
+VOCÊ VENCEU!,VOCÊ VENCEU!,YOU WIN!
+O BOT VENCEU,O BOT VENCEU,THE BOT WINS
+Duração %d:%02d   ·   Maior rally %d   ·   Perfeitos %d%%,Duração %d:%02d   ·   Maior rally %d   ·   Perfeitos %d%%,Time %d:%02d   ·   Best rally %d   ·   Perfect %d%%
+%s liberado!,%s liberado!,%s unlocked!
+REVANCHE,REVANCHE,REMATCH
+TROCAR BOT,TROCAR BOT,CHANGE BOT
+MENU,MENU,MENU
+Seus pontos: %s,Seus pontos: %s,Your points: %s
+nenhum,nenhum,none
+Sensibilidade da mira,Sensibilidade da mira,Aim sensitivity
+Música,Música,Music
+Efeitos,Efeitos,Effects
+Modo canhoto,Modo canhoto,Left-handed mode
+Vibração,Vibração,Vibration
+LIGADO,LIGADO,ON
+DESLIGADO,DESLIGADO,OFF
+Idioma,Idioma,Language
+PAUSA,PAUSA,PAUSED
+CONTINUAR,CONTINUAR,RESUME
+REINICIAR,REINICIAR,RESTART
+SAIR PARA O MENU,SAIR PARA O MENU,QUIT TO MENU
+VOCÊ %d  ×  %d BOT,VOCÊ %d  ×  %d BOT,YOU %d  ×  %d BOT
+Rally: %d toques   ·   Recorde: %d,Rally: %d toques   ·   Recorde: %d,Rally: %d touches   ·   Best: %d
+Reiniciar,Reiniciar,Restart
+Bot: %s,Bot: %s,Bot: %s
+O controle passa para quem vai tocar na bola,O controle passa para quem vai tocar na bola,Control goes to whoever will play the ball
+Ponto seu! %s,Ponto seu! %s,Your point! %s
+Ponto do bot. %s,Ponto do bot. %s,Bot's point. %s
+Fim do %dº set — %d × %d,Fim do %dº set — %d × %d,End of set %d — %d × %d
+PERFEITO!,PERFEITO!,PERFECT!
+BOM,BOM,GOOD
+CEDO,CEDO,EARLY
+TARDE,TARDE,LATE
+LONGE,LONGE,TOO FAR
+SEM BOLA,SEM BOLA,NO BALL
+SACAR,SACAR,SERVE
+RECEBER,RECEBER,RECEIVE
+LEVANTAR,LEVANTAR,SET
+ATACAR,ATACAR,ATTACK
+PASSAR,PASSAR,PASS
+BLOQUEAR,BLOQUEAR,BLOCK
+LARGAR,LARGAR,TIP
+PEIXINHO,PEIXINHO,DIVE
+POR BAIXO,POR BAIXO,UNDERHAND
+FLUTUANTE,FLUTUANTE,FLOAT
+VIAGEM,VIAGEM,JUMP
+Saque perdido,Saque perdido,Missed serve
+Fora (antena),Fora (antena),Out (antenna)
+Bola no chão,Bola no chão,Ball down
+Rede,Rede,Net
+Fora,Fora,Out
+FUNDO,FUNDO,DEEP
+FUNDO ESQ,FUNDO ESQ,DEEP LEFT
+FUNDO DIR,FUNDO DIR,DEEP RIGHT
+MEIO,MEIO,MIDDLE
+CURTA ESQ,CURTA ESQ,SHORT LEFT
+CURTA DIR,CURTA DIR,SHORT RIGHT
+ALTA,ALTA,HIGH
+PONTA,PONTA,OUTSIDE
+RÁPIDA,RÁPIDA,QUICK
+PIPE,PIPE,PIPE
+LEVANTADOR,LEVANTADOR,SETTER
+PULAR,PULAR,SKIP
+1/3 · Ande até o anel colorido no chão (joystick),1/3 · Ande até o anel colorido no chão (joystick),1/3 · Walk to the colored ring on the ground (joystick)
+2/3 · Segure o botão e solte quando o anel branco encostar no colorido,2/3 · Segure o botão e solte quando o anel branco encostar no colorido,2/3 · Hold the button and release when the white ring touches the colored one
+"3/3 · Segure o botão, arraste a mira até FUNDO ESQ e solte para sacar","3/3 · Segure o botão, arraste a mira até FUNDO ESQ e solte para sacar","3/3 · Hold the button, drag the aim to DEEP LEFT and release to serve"
+Pronto! Agora é contra o bot.,Pronto! Agora é contra o bot.,Done! Now it's you against the bot.
+Dica: o anel aparece onde a bola vai chegar — chegue lá antes dela.,Dica: o anel aparece onde a bola vai chegar — chegue lá antes dela.,Tip: the ring shows where the ball will arrive — get there first.
+Dica: solte no instante em que os anéis se encostam (o botão fica verde).,Dica: solte no instante em que os anéis se encostam (o botão fica verde).,Tip: release the moment the rings touch (the button turns green).
+Dica: arraste para a esquerda e para cima até a mira grudar em FUNDO ESQ.,Dica: arraste para a esquerda e para cima até a mira grudar em FUNDO ESQ.,Tip: drag left and up until the aim snaps to DEEP LEFT.
+Isso! Esse é o lugar do próximo toque.,Isso! Esse é o lugar do próximo toque.,That's it! That's where the next touch happens.
+Boa! %s,Boa! %s,Nice! %s

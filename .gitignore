@@ -9,3 +9,4 @@ export/
 
 # Modelo de build do Android (gerado no CI por --install-android-build-template)
 android/
+*.translation

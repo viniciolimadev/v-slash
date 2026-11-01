@@ -58,7 +58,7 @@ func _ready() -> void:
 	_message.modulate.a = 0.0
 	_banner.modulate.a = 0.0
 
-	_reset_btn = _make_button(root, "Reiniciar")
+	_reset_btn = _make_button(root, tr("Reiniciar"))
 	_reset_btn.position = Vector2(14.0, 12.0)
 	_reset_btn.pressed.connect(func() -> void: reset_pressed.emit())
 
@@ -70,7 +70,7 @@ func _ready() -> void:
 	_pause_btn.visible = false
 	_pause_btn.pressed.connect(func() -> void: pause_pressed.emit())
 
-	_level_btn = _make_button(root, "Bot: Médio")
+	_level_btn = _make_button(root, "")
 	_level_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_level_btn.offset_left = -204.0
 	_level_btn.offset_right = -14.0
@@ -91,7 +91,7 @@ func _ready() -> void:
 	var group := ButtonGroup.new()
 	for kind in ServeType.NAMES.size():
 		var b := Button.new()
-		b.text = str(ServeType.NAMES[kind])
+		b.text = tr(str(ServeType.NAMES[kind]))
 		b.focus_mode = Control.FOCUS_NONE
 		b.toggle_mode = true
 		b.button_group = group
@@ -119,8 +119,8 @@ func set_mode(mode: Mode) -> void:
 
 
 func set_board(rules: MatchRules, rally: int, best: int) -> void:
-	_score.text = "VOCÊ %d  ×  %d BOT" % [rules.points[0], rules.points[1]]
-	var line := "Rally: %d toques   ·   Recorde: %d" % [rally, best]
+	_score.text = tr("VOCÊ %d  ×  %d BOT") % [rules.points[0], rules.points[1]]
+	var line := tr("Rally: %d toques   ·   Recorde: %d") % [rally, best]
 	if not rules.is_endless():
 		line = "Sets %d – %d   ·   " % [rules.sets[0], rules.sets[1]] + line
 	_rally.text = line
@@ -143,7 +143,7 @@ func show_serve_picker(on: bool, kind: int) -> void:
 
 
 func set_level_name(level_text: String) -> void:
-	_level_btn.text = "Bot: " + level_text
+	_level_btn.text = tr("Bot: %s") % tr(level_text)
 
 
 ## Feedback rápido do toque (PERFEITO!, BOM, CEDO, LONGE...). punch = entra grande (PERFEITO).

@@ -29,6 +29,11 @@ window/handheld/orientation=4
 
 pointing/emulate_touch_from_mouse=true
 
+[internationalization]
+
+locale/translations=PackedStringArray("res://assets/i18n/strings.pt_BR.translation", "res://assets/i18n/strings.en.translation")
+locale/fallback="en"
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

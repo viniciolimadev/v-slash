@@ -104,7 +104,7 @@ func refresh() -> void:
 				var hp: Vector3 = m["pos"]
 				_hl_dot.position = Vector3(hp.x, 0.025, hp.z)
 				_hl_label.position = Vector3(hp.x, 0.6, hp.z)
-				_hl_label.text = _hl_name
+				_hl_label.text = tr(_hl_name)
 				_hl_dot.visible = true
 				_hl_label.visible = true
 
@@ -143,7 +143,7 @@ func refresh() -> void:
 		var ap: Vector3 = aim["pos"]
 		_reticle.position = Vector3(ap.x, 0.05, ap.z)
 		snapped_name = str(aim["name"])
-		_reticle_label.text = snapped_name
+		_reticle_label.text = tr(snapped_name)
 
 	# alvos da jogada (enquanto você segura o botão)
 	var show_magnets := not aim.is_empty() and game.human_aiming
@@ -161,7 +161,7 @@ func refresh() -> void:
 			var picked := str(m["name"]) == snapped_name
 			l.visible = named and not picked
 			l.position = Vector3(mp.x, 0.45, mp.z)
-			l.text = str(m["name"])
+			l.text = tr(str(m["name"]))
 			dot.visible = true
 			dot.position = Vector3(mp.x, 0.03, mp.z)
 			(dot.material_override as StandardMaterial3D).albedo_color = \

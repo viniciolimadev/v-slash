@@ -3,7 +3,7 @@ extends RefCounted
 ## Progresso, recordes e opções em user://save.cfg (ConfigFile versionado).
 ## Arquivo ausente ou ilegível = valores padrão; nunca derruba o jogo.
 
-const VERSION := 4                  # 2: tipo de saque (F2); 3: progresso por modo (F3); 4: volumes (F4)
+const VERSION := 5                  # 2: saque (F2); 3: progresso por modo (F3); 4: volumes (F4); 5: idioma e privacidade (F5)
 const DEFAULT_PATH := "user://save.cfg"
 const AIM_SENS_MIN := 0.5
 const AIM_SENS_MAX := 2.0
@@ -29,6 +29,7 @@ var vibration := true
 var serve_type := ServeType.Kind.UNDER   # último tipo de saque escolhido
 var music_vol := 0.8                # 0..1 (barramento Music)
 var sfx_vol := 1.0                  # 0..1 (barramento SFX)
+var lang := ""                      # "" = idioma do aparelho; "pt_BR" ou "en" (Lang)
 
 
 func _init(p_path := DEFAULT_PATH) -> void:
@@ -59,6 +60,8 @@ func load_file() -> void:
 	# saves até a versão 3 não têm volume: ficam os padrões
 	music_vol = _unit(cfg, "music_vol", 0.8)
 	sfx_vol = _unit(cfg, "sfx_vol", 1.0)
+	var l: Variant = cfg.get_value("options", "lang", "")
+	lang = str(l) if str(l) in Lang.LOCALES else ""
 
 
 ## Grava num arquivo temporário e troca de nome: um desligamento no meio não corrompe o save.
@@ -80,6 +83,7 @@ func save_file() -> Error:
 	cfg.set_value("options", "serve_type", serve_type)
 	cfg.set_value("options", "music_vol", music_vol)
 	cfg.set_value("options", "sfx_vol", sfx_vol)
+	cfg.set_value("options", "lang", lang)
 	var tmp := path + ".tmp"
 	var err := cfg.save(tmp)
 	if err != OK:

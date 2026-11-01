@@ -13,7 +13,7 @@ const HINT_AFTER := 3               # falhas seguidas antes de mostrar a dica
 const DONE_TIME := 2.0
 const MOVE_DIST := 0.5              # m do anel para contar "chegou"
 const MOVE_FLIGHT := 2.2            # s: bola lenta no 1º passo
-const TEXTS := [
+const TEXTS := [                    # chaves de tradução (assets/i18n/strings.csv)
 	"1/3 · Ande até o anel colorido no chão (joystick)",
 	"2/3 · Segure o botão e solte quando o anel branco encostar no colorido",
 	"3/3 · Segure o botão, arraste a mira até FUNDO ESQ e solte para sacar",
@@ -71,7 +71,7 @@ func _ready() -> void:
 	_text.offset_top = 12.0
 	_text.offset_bottom = 100.0
 	var skip_btn := Button.new()
-	skip_btn.text = "PULAR"
+	skip_btn.text = tr("PULAR")
 	skip_btn.focus_mode = Control.FOCUS_NONE
 	skip_btn.add_theme_font_size_override("font_size", 24)
 	root.add_child(skip_btn)
@@ -95,7 +95,7 @@ func tick(dt: float) -> void:
 		if step == Step.MOVE and not _ok and plan != null and plan.player == human and game.time <= plan.t:
 			if Vector2(plan.pos.x - human.position.x, plan.pos.z - human.position.z).length() <= MOVE_DIST:
 				_ok = true
-				_say("Isso! Esse é o lugar do próximo toque.")
+				_say(tr("Isso! Esse é o lugar do próximo toque."))
 	elif step == Step.AIM:
 		if game.state == Game.State.SERVE_WAIT:
 			if game.server != human:
@@ -129,7 +129,7 @@ func _on_touch(p: Player, grade: String, _q: float) -> void:
 		return
 	if step == Step.TIMING and (grade == "PERFEITO!" or grade == "BOM"):
 		_ok = true
-		_say("Boa! " + grade)
+		_say(tr("Boa! %s") % tr(grade))
 	elif step == Step.AIM and grade == "SAQUE" and _zone == TARGET_ZONE:
 		_ok = true
 
@@ -156,9 +156,9 @@ func _next() -> void:
 
 
 func _show_text() -> void:
-	var t: String = TEXTS[step]
+	var t := tr(str(TEXTS[step]))
 	if fails >= HINT_AFTER and str(HINTS[step]) != "":
-		t += "\n" + str(HINTS[step])
+		t += "\n" + tr(str(HINTS[step]))
 	_say(t)
 
 
