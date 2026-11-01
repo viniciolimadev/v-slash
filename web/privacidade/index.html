@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vôlei Mobile — Privacidade / Privacy</title>
+<style>
+  :root { --bg: #fdf8ef; --ink: #10202e; --muted: #4d5b66; --accent: #e8702a; --line: #e6dccb; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0e1a24; --ink: #eef2f5; --muted: #a9b6c0; --accent: #ff9a5a; --line: #24384a; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.7rem; margin: 0 0 4px; } h2 { font-size: 1.2rem; margin-top: 2rem; color: var(--accent); }
+  nav a, a { color: var(--accent); } .muted { color: var(--muted); font-size: .95rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .95rem; } td, th { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; vertical-align: top; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 48px 0; }
+</style>
+</head>
+<body>
+<main>
+<nav><a href="#pt">Português</a> · <a href="#en">English</a></nav>
+
+<section id="pt">
+<h1>Política de privacidade — Vôlei Mobile</h1>
+<p class="muted">Versão 1 · vale a partir da versão 1.0.0 do jogo · contato: <a href="https://github.com/viniciolimadev/v-slash/issues">github.com/viniciolimadev/v-slash/issues</a></p>
+<p>O jogo funciona inteiro sem enviar nada. Só se você escolher <strong>“Pode enviar”</strong> (na primeira abertura ou em Opções → Privacidade) ele envia, ao fim de cada partida, estatísticas <strong>anônimas</strong> usadas apenas para equilibrar a dificuldade dos bots. O padrão é <strong>não enviar</strong>.</p>
+<h2>O que é enviado</h2>
+<table>
+<tr><th>Campo</th><th>Exemplo</th></tr>
+<tr><td>Id aleatório desta instalação (não vem do aparelho; muda quando você apaga os dados)</td><td>3f2a9c1e-…</td></tr>
+<tr><td>Versão do jogo e plataforma</td><td>1.0.0, android</td></tr>
+<tr><td>Modo, nível do bot, vitória, placar dos sets, duração</td><td>1v1, Médio, sim, 15–12 13–15 15–9, 512 s</td></tr>
+<tr><td>Rally médio e maior, % de toques perfeitos</td><td>5,1 · 14 · 42%</td></tr>
+<tr><td>Como você perdeu pontos, saques usados, bloqueios, peixinhos</td><td>Bola no chão 9, Fora 4…</td></tr>
+<tr><td>Duas opções do jogo</td><td>modo canhoto, sensibilidade da mira</td></tr>
+<tr><td>Ao abrir o jogo: idioma; ao fim do tutorial: se pulou e o passo com mais erros</td><td>pt_BR</td></tr>
+<tr><td>Se o jogo encontrar um erro de programação: a mensagem e o arquivo/linha do código</td><td>game.gd:512</td></tr>
+</table>
+<h2>O que não é enviado</h2>
+<p>Nome, e-mail, contas, localização, contatos, modelo ou identificadores do aparelho, publicidade. O servidor não grava endereço IP nem cabeçalhos, e guarda só o dia (não a hora) do envio.</p>
+<h2>Onde fica e por quanto tempo</h2>
+<p>Num banco de dados da Cloudflare (Workers + D1), usado só por este projeto, por até 24 meses. Os dados não são vendidos nem compartilhados.</p>
+<h2>Seus controles (LGPD)</h2>
+<p>Em Opções → Privacidade você desliga o envio a qualquer momento ou toca em <strong>Apagar meus dados</strong>: o jogo pede ao servidor para excluir tudo do seu id e passa a usar um id novo. Também é possível pedir a exclusão pelo contato acima.</p>
+</section>
+
+<hr>
+
+<section id="en" lang="en">
+<h1>Privacy policy — Vôlei Mobile</h1>
+<p class="muted">Version 1 · applies from game version 1.0.0 · contact: <a href="https://github.com/viniciolimadev/v-slash/issues">github.com/viniciolimadev/v-slash/issues</a></p>
+<p>The game works fully without sending anything. Only if you choose <strong>“Send”</strong> (on first launch or in Options → Privacy) does it send, after each match, <strong>anonymous</strong> statistics used only to balance the bots. The default is <strong>don't send</strong>.</p>
+<h2>What is sent</h2>
+<p>A random id for this install (not derived from the device; it changes when you erase your data), game version and platform, mode, bot level, win/loss, set scores, match length, average and best rally, % of perfect touches, how you lost points, serves used, blocks, dives, two settings (left-handed mode, aim sensitivity); on launch the language; at the end of the tutorial whether you skipped it and the step with most mistakes; and, if the game hits a programming error, the message and code file/line.</p>
+<h2>What is not sent</h2>
+<p>Name, e-mail, accounts, location, contacts, device model or identifiers, advertising ids. The server stores no IP address or headers, and keeps only the day (not the time) of each upload.</p>
+<h2>Where and for how long</h2>
+<p>In a Cloudflare database (Workers + D1) used only by this project, for up to 24 months. Data is never sold or shared.</p>
+<h2>Your controls</h2>
+<p>In Options → Privacy you can turn sending off at any time or tap <strong>Erase my data</strong>: the game asks the server to delete everything for your id and switches to a new id. You can also request deletion through the contact above.</p>
+</section>
+</main>
+</body>
+</html>

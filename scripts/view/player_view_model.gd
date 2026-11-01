@@ -11,6 +11,7 @@ const SKINS := [Color(0.96, 0.8, 0.66), Color(0.78, 0.57, 0.4), Color(0.55, 0.37
 const HAIRS := [Color(0.15, 0.1, 0.07), Color(0.45, 0.28, 0.12), Color(0.9, 0.75, 0.4), Color(0.08, 0.06, 0.05)]
 
 var uniform := 0                    # 0 = titular, 1 = segundo uniforme (o parceiro no 2v2)
+var number_label: Label3D = null    # número nas costas (modo daltônico, RF-5.08)
 var skeleton: Skeleton3D
 var tris := 0                       # triângulos do modelo (orçamento: ≤ 5 k)
 var shot_clip := ""                 # clipe de toque agendado ou tocando ("" = só locomoção)
@@ -67,6 +68,16 @@ func _build() -> void:
 		_part(kit, fore, MeshKit.cyl(0.05, 0.042, 0.28), Vector3(0.0, -0.14, 0.0), skin)
 		_part(kit, fore, MeshKit.box(Vector3(0.08, 0.1, 0.05)), Vector3(0.0, -0.32, 0.0), skin)
 	tris = kit.tris
+	# número nas costas: lê de trás (o modelo olha para -Z); cor do time no contorno
+	number_label = Label3D.new()
+	number_label.text = str(uniform + 1)
+	number_label.font_size = 64
+	number_label.pixel_size = 0.005
+	number_label.outline_size = 14
+	number_label.outline_modulate = player.color.darkened(0.5)
+	number_label.position = Vector3(0.0, HIP_H + 0.4, 0.13)
+	number_label.visible = false
+	_tilt.add_child(number_label)
 	var mi := MeshInstance3D.new()
 	mi.mesh = kit.build()
 	skeleton.add_child(mi)

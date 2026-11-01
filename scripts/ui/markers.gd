@@ -4,6 +4,8 @@ extends Node3D
 
 var game: Game
 var human: Player
+var colorblind := false             # anel com padrão por ação além da cor (RF-5.08)
+var ring_pattern := 0               # padrão mostrado agora: 0 cheio, 1 tracejado, 2 pontilhado, 3 duplo
 
 var _shadow: MeshInstance3D
 var _land: MeshInstance3D
@@ -20,6 +22,7 @@ var _hl_label: Label3D
 var _hl_name := ""
 var _block_shadow: MeshInstance3D
 var _stamina_bars: Array[MeshInstance3D] = []
+var _patterns: Array[Mesh] = []
 
 
 func setup(g: Game, h: Player) -> void:
@@ -30,6 +33,7 @@ func setup(g: Game, h: Player) -> void:
 	_ring_mat = _flat(Color(0.25, 0.85, 0.75))
 	_ring = _torus(0.38, 0.48, _ring_mat)
 	_outline(_ring, 0.34, 0.52)
+	_patterns = [_ring.mesh, _pattern_mesh(1), _pattern_mesh(2), _pattern_mesh(3)]
 	_approach_mat = _flat(Color(1.0, 1.0, 1.0, 0.9))
 	_approach = _torus(0.4, 0.47, _approach_mat)
 	_outline(_approach, 0.37, 0.5)
@@ -104,7 +108,7 @@ func refresh() -> void:
 				var hp: Vector3 = m["pos"]
 				_hl_dot.position = Vector3(hp.x, 0.025, hp.z)
 				_hl_label.position = Vector3(hp.x, 0.6, hp.z)
-				_hl_label.text = _hl_name
+				_hl_label.text = tr(_hl_name)
 				_hl_dot.visible = true
 				_hl_label.visible = true
 
@@ -119,6 +123,8 @@ func refresh() -> void:
 		var at := game.plan_view_pos(plan) if mine else game.block_plan.pos
 		_ring.position = Vector3(at.x, 0.04, at.z)
 		_ring_mat.albedo_color = _act_color(act)
+		ring_pattern = pattern_for(act)
+		_ring.mesh = _patterns[ring_pattern]
 		var remaining := (plan.t if mine else game.block_release_t()) - game.time
 		if remaining > -Tuning.WINDOW_LATE:
 			_approach.visible = true
@@ -143,7 +149,7 @@ func refresh() -> void:
 		var ap: Vector3 = aim["pos"]
 		_reticle.position = Vector3(ap.x, 0.05, ap.z)
 		snapped_name = str(aim["name"])
-		_reticle_label.text = snapped_name
+		_reticle_label.text = tr(snapped_name)
 
 	# alvos da jogada (enquanto você segura o botão)
 	var show_magnets := not aim.is_empty() and game.human_aiming
@@ -161,7 +167,7 @@ func refresh() -> void:
 			var picked := str(m["name"]) == snapped_name
 			l.visible = named and not picked
 			l.position = Vector3(mp.x, 0.45, mp.z)
-			l.text = str(m["name"])
+			l.text = tr(str(m["name"]))
 			dot.visible = true
 			dot.position = Vector3(mp.x, 0.03, mp.z)
 			(dot.material_override as StandardMaterial3D).albedo_color = \
@@ -203,6 +209,43 @@ func _update_stamina_bars() -> void:
 		bar.scale = Vector3(k, 1.0, 1.0)
 		(bar.material_override as StandardMaterial3D).albedo_color = \
 				Color(1.0, 0.3, 0.25) if p.is_tired() else Color(0.3, 1.0, 0.4)
+
+
+## Modo daltônico: cada ação também tem forma (cheio = receber, tracejado = levantar,
+## pontilhado = atacar/largar, duplo = bloquear/peixinho). Desligado: sempre cheio.
+func pattern_for(act: int) -> int:
+	if not colorblind:
+		return 0
+	match act:
+		Game.Act.SET_BALL:
+			return 1
+		Game.Act.ATTACK, Game.Act.DINK:
+			return 2
+		Game.Act.BLOCK, Game.Act.DIVE:
+			return 3
+	return 0
+
+
+func _pattern_mesh(kind: int) -> Mesh:
+	var kit := MeshKit.new()
+	if kind == 1:
+		for i in 10:
+			var a := TAU * i / 10.0
+			kit.add(MeshKit.box(Vector3(0.18, 0.03, 0.1)), Transform3D(Basis(Vector3.UP, -a), Vector3(cos(a), 0.0, sin(a)) * 0.43),
+					Color.WHITE)
+	elif kind == 2:
+		for i in 12:
+			var a := TAU * i / 12.0
+			kit.add(MeshKit.sphere(0.065, false, 6), Transform3D(Basis.IDENTITY, Vector3(cos(a), 0.0, sin(a)) * 0.43), Color.WHITE)
+	else:
+		for r: Vector2 in [Vector2(0.4, 0.48), Vector2(0.22, 0.29)]:
+			var t := TorusMesh.new()
+			t.inner_radius = r.x
+			t.outer_radius = r.y
+			t.rings = 32
+			t.ring_segments = 6
+			kit.add(t, Transform3D.IDENTITY, Color.WHITE)
+	return kit.build()
 
 
 func _act_color(act: int) -> Color:

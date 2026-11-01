@@ -86,6 +86,14 @@ func _run() -> void:
 	_test_tutorial()
 	print("== tema: alvos de toque ==")
 	_test_theme_targets()
+	print("== telemetria (opcional e anônima) ==")
+	_test_telemetry()
+	print("== erro em produção ==")
+	_test_error_recovery()
+	print("== acessibilidade ==")
+	_test_accessibility()
+	print("== idiomas ==")
+	_test_i18n()
 	print("== fluxo de telas (App) ==")
 	_test_app_flow()
 	print("== duração: humano casual x Fácil ==")
@@ -1765,6 +1773,9 @@ func _test_theme_targets() -> void:
 		"escolha": func() -> void: app.call("show_level_select"),
 		"opções": func() -> void: app.call("show_options", func() -> void: pass),
 		"resultado": func() -> void: app.call("show_result", MatchResult.new(0, 0, [Vector2i(15, 9)], st)),
+		"consentimento": func() -> void: app.call("show_consent"),
+		"privacidade": func() -> void: app.call("show_privacy", func() -> void: pass),
+		"sobre": func() -> void: app.call("show_about"),
 	}
 	for k in opens:
 		(opens[k] as Callable).call()
@@ -1789,6 +1800,246 @@ func _test_theme_targets() -> void:
 	DirAccess.remove_absolute(path)
 
 
+## RF-5.03/5.04/5.05: sem consentimento nada é guardado; match_end com exatamente os campos da
+## política; fila limitada; envio só tira da fila com resposta 2xx; apagar troca o id.
+func _test_telemetry() -> void:
+	var path := "user://test_tel.cfg"
+	var qpath := path + ".queue.json"
+	for f in [path, qpath]:
+		DirAccess.remove_absolute(f)
+	var save := SaveData.new(path)
+	var tel := Telemetry.new(save, qpath)
+	var st := MatchStats.new()
+	st.best_rally = 9
+	st.rallies = [3, 5, 7]
+	st.points_by_reason = [{"Fora": 2}, {"Bola no chão": 9, "Rede": 1}]
+	st.serves = [[4, 2, 1], [6, 0, 0]]
+	st.blocks = [3, 0]
+	st.dives = [1, 2]
+	var r := MatchResult.new(0, 1, [Vector2i(15, 12), Vector2i(13, 15), Vector2i(15, 9)], st)
+	tel.record(tel.match_end(r))
+	tel.record(tel.session_start())
+	_check(save.consent == -1 and tel.queue.is_empty() and not FileAccess.file_exists(qpath),
+			"sem consentimento nada é enfileirado nem gravado")
+	tel.set_consent(true)
+	var id := save.install_id
+	_check(RegEx.create_from_string("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$").search(id) != null,
+			"consentimento cria um id aleatório (UUID v4)")
+	var e := tel.match_end(r)
+	var keys: Array = e.keys()
+	keys.sort()
+	var want: Array = Telemetry.MATCH_FIELDS.duplicate()
+	want.sort()
+	_check(keys == want, "match_end tem exatamente os campos da política (%d)" % keys.size())
+	_check(e["sets"] == [[15, 12], [13, 15], [15, 9]] and e["won"] == true and e["mode"] == "1v1" and e["rally_avg"] == 5.0
+			and e["points_lost_by"] == {"Bola no chão": 9, "Rede": 1} and e["serve_types"] == [4, 2, 1] and e["blocks"] == 3
+			and e["dives"] == 1 and (e["options"] as Dictionary).keys().size() == 2, "valores do evento vêm da partida (time 0 = você)")
+	for i in 60:
+		tel.record(tel.session_start())
+	_check(tel.queue.size() == Telemetry.MAX_QUEUE, "fila limitada a %d eventos" % Telemetry.MAX_QUEUE)
+	var again := Telemetry.new(save, qpath)
+	_check(again.queue.size() == Telemetry.MAX_QUEUE, "fila sobrevive a fechar o jogo (arquivo)")
+	tel.url = ""
+	_check(not tel.flush(null), "sem URL configurada nada é enviado")
+	tel.sending = 10
+	tel.on_sent(HTTPRequest.RESULT_CANT_CONNECT, 0)
+	_check(tel.queue.size() == Telemetry.MAX_QUEUE and tel.sending == 0, "sem rede: o lote fica na fila")
+	tel.sending = 10
+	tel.on_sent(HTTPRequest.RESULT_SUCCESS, 200)
+	_check(tel.queue.size() == Telemetry.MAX_QUEUE - 10, "resposta 2xx tira só o lote enviado")
+	var body := tel.forget()
+	_check(body.get("install_id") == id and save.install_id != id and save.install_id != "" and tel.queue.is_empty(),
+			"apagar: pedido de exclusão do id antigo, fila vazia e id novo")
+	tel.set_consent(false)
+	tel.record(tel.session_start())
+	var back := SaveData.new(path)
+	back.load_file()
+	_check(back.consent == 0 and back.install_id == "" and tel.queue.is_empty(), "desligar apaga o id e para de registrar (save v5)")
+	for f in [path, qpath]:
+		DirAccess.remove_absolute(f)
+
+
+## RF-5.06: erro de script no meio da partida vira relatório (com consentimento) e volta ao título.
+func _test_error_recovery() -> void:
+	var path := "user://test_err.cfg"
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(path + ".queue.json")
+	var save := SaveData.new(path)
+	save.consent = 1
+	save.install_id = Telemetry.new_id()
+	save.tutorial_done = true
+	var app: Node = load("res://scenes/app.tscn").instantiate()
+	app.set("save", save)
+	root.add_child(app)
+	var tel: Telemetry = app.get("telemetry")
+	tel.queue.clear()
+	app.call("start_match", 0)
+	var watch: ErrorWatch = app.get("errors")
+	watch._log_error("tick", "drivers/gles3/x.cpp", 1, "driver", "", false, Logger.ERROR_TYPE_ERROR, [])
+	app.call("_process", DT)
+	_check(app.get("match_node") != null and tel.queue.is_empty(), "erro do motor (não do script) não derruba a partida")
+	watch._log_error("tick", "res://scripts/core/game.gd", 512, "Invalid access", "", false, Logger.ERROR_TYPE_SCRIPT, [])
+	app.call("_process", DT)
+	var scr = app.get("screen")
+	_check(app.get("match_node") == null and scr is TitleScreen and (scr as TitleScreen).notice != "" and not paused,
+			"erro de script na partida: volta ao título com aviso")
+	var ev: Dictionary = tel.queue[-1] if not tel.queue.is_empty() else {}
+	_check(ev.get("event") == "error" and str(ev.get("where")).begins_with("scripts/core/game.gd:512")
+			and not ev.has("sets"), "relatório de erro só com mensagem e arquivo:linha")
+	for i in 10:
+		watch._log_error("f", "res://scripts/x.gd", i, "loop", "", false, Logger.ERROR_TYPE_SCRIPT, [])
+	_check(watch.take().size() == ErrorWatch.MAX_PER_SESSION - 1, "no máximo %d relatórios por sessão" % ErrorWatch.MAX_PER_SESSION)
+	root.remove_child(app)
+	app.free()
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(path + ".queue.json")
+
+
+## RF-5.08: modo daltônico muda o padrão dos anéis por ação e mostra número na camisa;
+## texto 125% aumenta as fontes sem quebrar os alvos de toque.
+func _test_accessibility() -> void:
+	var cfg := MatchConfig.new()
+	cfg.colorblind = true
+	var main := _make_main_cfg(cfg)
+	var mk: Markers = main.get("markers")
+	var acts := [Game.Act.RECEIVE, Game.Act.SET_BALL, Game.Act.ATTACK, Game.Act.BLOCK]
+	var seen := {}
+	for a in acts:
+		seen[mk.pattern_for(a)] = true
+	_check(seen.size() == 4, "daltônico: receber, levantar, atacar e bloquear com padrões diferentes")
+	var num := _model_view(main.get("human")).number_label
+	_check(num != null and num.visible and num.text == "1", "daltônico: número nas costas")
+	_free_main(main)
+	main = _make_main(false)
+	mk = main.get("markers")
+	_check(mk.pattern_for(Game.Act.ATTACK) == 0 and not _model_view(main.get("human")).number_label.visible,
+			"sem o modo: anel cheio e sem número (como antes)")
+	_free_main(main)
+	var path := "user://test_a11y.cfg"
+	var sv := SaveData.new(path)
+	sv.colorblind = true
+	sv.text_scale = 1.25
+	sv.save_file()
+	var back := SaveData.new(path)
+	back.load_file()
+	_check(back.colorblind and back.text_scale == 1.25, "daltônico e texto 125% gravados (save v5)")
+	UiTheme.set_text_scale(1.25)
+	var t := TitleScreen.new()
+	root.add_child(t)
+	var title_size := (t.column.get_child(0) as Label).label_settings.font_size
+	var small := 0
+	for b in _buttons(t):
+		if b.get_combined_minimum_size().y < 64.0:
+			small += 1
+	_check(title_size == roundi(64 * 1.25) and small == 0, "texto 125%%: título com %d px, botões ainda ≥ 64 px" % title_size)
+	t.free()
+	UiTheme.set_text_scale(1.0)
+	DirAccess.remove_absolute(path)
+
+
+func _csv_strings() -> Dictionary:
+	var out := {}
+	var f := FileAccess.open("res://assets/i18n/strings.csv", FileAccess.READ)
+	var head := f.get_csv_line()
+	while not f.eof_reached():
+		var row := f.get_csv_line()
+		if row.size() >= 3 and row[0] != "":
+			out[row[0]] = {"pt": row[head.find("pt_BR")], "en": row[head.find("en")]}
+	return out
+
+
+func _gd_files(dir: String, out: Array[String]) -> Array[String]:
+	for f in DirAccess.get_files_at(dir):
+		if f.ends_with(".gd"):
+			out.append(dir.path_join(f))
+	for d in DirAccess.get_directories_at(dir):
+		_gd_files(dir.path_join(d), out)
+	return out
+
+
+func _texts(n: Node, out: Array[String]) -> Array[String]:
+	if (n is Label or n is Button) and n.is_visible_in_tree():
+		out.append(str(n.get("text")))
+	for c in n.get_children():
+		_texts(c, out)
+	return out
+
+
+## RF-5.07: toda chave tem pt e en; todo texto do jogo passa por tr(); telas em inglês sem português.
+func _test_i18n() -> void:
+	var strings := _csv_strings()
+	var empty: Array[String] = []
+	for k in strings:
+		if str(strings[k]["pt"]) == "" or str(strings[k]["en"]) == "":
+			empty.append(k)
+	_check(strings.size() > 60 and empty.is_empty(), "%d chaves, todas com pt e en (sem: %s)" % [strings.size(), empty])
+	# chaves usadas no código (tr("...")) e nas tabelas mostradas na tela
+	var used: Array[String] = []
+	var rx := RegEx.create_from_string('tr\\("((?:[^"\\\\]|\\\\.)*)"\\)')
+	var lint := RegEx.create_from_string('\\b(add_title|add_line|add_button|banner|message|popup|_say|_toggle|_slider)\\("([^"]*)"')
+	var fmt := RegEx.create_from_string('%[-0-9.]*[a-z]|\\bBot\\b|VÔLEI MOBILE')     # formatos, "Bot" e a marca não traduzem
+	var letter := RegEx.create_from_string('[A-Za-zÀ-ú]')
+	var raw: Array[String] = []
+	for path in _gd_files("res://scripts", []):
+		var src := FileAccess.get_file_as_string(path)
+		for m in rx.search_all(src):
+			used.append(m.get_string(1))
+		if path.contains("/ui/") or path.contains("/tutorial/") or path.ends_with("main.gd"):
+			for m in lint.search_all(src):
+				if letter.search(fmt.sub(m.get_string(2), "", true)) != null:
+					raw.append("%s: %s" % [path.get_file(), m.get_string(0)])
+	for list in [Tuning.BOT_NAMES, ServeType.NAMES, TutorialDirector.TEXTS, TutorialDirector.HINTS]:
+		for k in list:
+			used.append(str(k))
+	for k in Game.ACT_LABELS:
+		used.append(str(k))
+	for z in Tuning.ATTACK_ZONES:
+		used.append(str(z[0]))
+	for k in ["Saque perdido", "Fora (antena)", "Bola no chão", "Rede", "Fora", "ALTA", "PONTA", "RÁPIDA", "PIPE", "LEVANTADOR",
+			"PERFEITO!", "BOM", "CEDO", "TARDE", "LONGE", "SEM BOLA"]:
+		used.append(k)
+	var missing: Array[String] = []
+	for k in used:
+		if k != "" and not strings.has(k) and not missing.has(k):
+			missing.append(k)
+	_check(missing.is_empty(), "todo texto traduzível tem linha no strings.csv (faltam: %s)" % [missing])
+	_check(raw.is_empty(), "nenhum texto literal na tela fora de tr() (achados: %s)" % [raw])
+	# telas em inglês: nenhum texto em português que tem tradução diferente
+	_check(Lang.resolve("", "pt") == "pt_BR" and Lang.resolve("", "es") == "en" and Lang.resolve("en", "pt") == "en",
+			"idioma: aparelho em português → pt_BR, outro → en, escolha manual vale")
+	TranslationServer.set_locale("en")
+	_check(tr("JOGAR") == "PLAY" and tr("Bola no chão") == "Ball down", "tradução carregada (JOGAR → PLAY)")
+	var path := "user://test_i18n.cfg"
+	DirAccess.remove_absolute(path)
+	var app: Node = load("res://scenes/app.tscn").instantiate()
+	var save := SaveData.new(path)
+	save.lang = "en"
+	app.set("save", save)
+	root.add_child(app)
+	var pt_left: Array[String] = []
+	var st := MatchStats.new()
+	st.points_by_reason = [{"Bola no chão": 3}, {}]
+	for open in [func() -> void: app.call("show_title"), func() -> void: app.call("show_level_select"),
+			func() -> void: app.call("show_options", func() -> void: pass),
+			func() -> void: app.call("show_result", MatchResult.new(0, 0, [Vector2i(15, 9)], st)),
+			func() -> void: app.call("show_consent"), func() -> void: app.call("show_privacy", func() -> void: pass),
+			func() -> void: app.call("show_about")]:
+		open.call()
+		for t in _texts(app.get("screen"), []):
+			for k in strings:
+				if strings[k]["pt"] != strings[k]["en"] and str(k).length() > 3 and t.contains(str(strings[k]["pt"]).replace("%s", "").replace("%d", "").strip_edges()) \
+						and not t.contains(str(strings[k]["en"]).replace("%s", "").replace("%d", "").strip_edges()):
+					pt_left.append(t)
+	_check(pt_left.is_empty() and TranslationServer.get_locale() == "en", "telas em inglês sem texto em português (achados: %s)" % [pt_left])
+	root.remove_child(app)
+	app.free()
+	var back := SaveData.new(path)
+	back.load_file()
+	_check(back.lang == "", "idioma automático por padrão (save novo)")
+	TranslationServer.set_locale("pt_BR")
+	DirAccess.remove_absolute(path)
+
+
 func _test_app_flow() -> void:
 	var path := "user://test_app.cfg"
 	DirAccess.remove_absolute(path)
@@ -1796,7 +2047,9 @@ func _test_app_flow() -> void:
 	var save := SaveData.new(path)
 	app.set("save", save)
 	root.add_child(app)
-	_check(app.get("screen") is TitleScreen, "app abre no título")
+	_check(app.get("screen") is ConsentScreen, "save novo: app pergunta das estatísticas antes do título")
+	(app.get("screen") as ConsentScreen).chosen.emit(false)
+	_check(app.get("screen") is TitleScreen and save.consent == 0 and save.install_id == "", "\"Não enviar\" leva ao título sem id")
 	app.call("show_level_select")
 	var btns := _buttons(app.get("screen"))
 	_check(btns.size() == 4 and not btns[0].disabled and btns[1].disabled and btns[2].disabled,

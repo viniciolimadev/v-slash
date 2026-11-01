@@ -15,7 +15,7 @@ func _init() -> void:
 
 
 func _build() -> void:
-	add_title("ESCOLHA O BOT", 48)
+	add_title(tr("ESCOLHA O BOT"), 48)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", int(GAP))
@@ -35,15 +35,15 @@ func _build() -> void:
 	add_space(4.0)
 	var r := save.rec(mode)
 	for lvl in 3:
-		var lvl_name := str(Tuning.BOT_NAMES[lvl]).to_upper()
-		var text := "%s   ·   %dV  %dD" % [lvl_name, r.wins[lvl], r.losses[lvl]]
+		var lvl_name := tr(str(Tuning.BOT_NAMES[lvl])).to_upper()
+		var text := tr("%s   ·   %dV  %dD") % [lvl_name, r.wins[lvl], r.losses[lvl]]
 		var locked := lvl > r.unlocked_level
 		if locked:
-			text = "%s   ·   vença o %s" % [lvl_name, Tuning.BOT_NAMES[lvl - 1]]
+			text = tr("%s   ·   vença o %s") % [lvl_name, tr(str(Tuning.BOT_NAMES[lvl - 1]))]
 		var b := add_button(text, str(lvl), func() -> void: level_chosen.emit(lvl, mode))
 		b.disabled = locked
 	add_space(8.0)
-	add_button("VOLTAR", "back", func() -> void: back_pressed.emit())
+	add_button(tr("VOLTAR"), "back", func() -> void: back_pressed.emit())
 
 
 ## Troca o modo e remonta os cartões com o progresso dele.

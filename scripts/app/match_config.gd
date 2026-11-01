@@ -12,6 +12,7 @@ var tutorial := false
 var aim_sens := 1.0
 var left_handed := false
 var vibration := true
+var colorblind := false
 var serve_type := ServeType.Kind.UNDER
 
 
@@ -23,5 +24,6 @@ static func from_save(save: SaveData, level: int, p_mode: int = Mode.ONE_V_ONE) 
 	c.aim_sens = save.aim_sens
 	c.left_handed = save.left_handed
 	c.vibration = save.vibration
+	c.colorblind = save.colorblind
 	c.serve_type = save.serve_type
 	return c

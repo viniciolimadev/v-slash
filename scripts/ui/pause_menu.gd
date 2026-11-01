@@ -43,10 +43,10 @@ class _PauseScreen extends Screen:
 		dim = true
 
 	func _build() -> void:
-		add_title("PAUSA", 52)
+		add_title(tr("PAUSA"), 52)
 		add_space(8.0)
-		add_button("CONTINUAR", "resume", func() -> void: menu.resume_pressed.emit())
-		add_button("REINICIAR", "restart", func() -> void: menu.restart_pressed.emit())
+		add_button(tr("CONTINUAR"), "resume", func() -> void: menu.resume_pressed.emit())
+		add_button(tr("REINICIAR"), "restart", func() -> void: menu.restart_pressed.emit())
 		if in_app:
-			add_button("OPÇÕES", "options", func() -> void: menu.options_pressed.emit())
-			add_button("SAIR PARA O MENU", "quit", func() -> void: menu.quit_pressed.emit())
+			add_button(tr("OPÇÕES"), "options", func() -> void: menu.options_pressed.emit())
+			add_button(tr("SAIR PARA O MENU"), "quit", func() -> void: menu.quit_pressed.emit())

@@ -50,7 +50,7 @@ func add_line(text: String, font_size := 26, color := Color(0.85, 0.9, 1.0)) -> 
 	l.text = text
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var ls := LabelSettings.new()
-	ls.font_size = font_size
+	ls.font_size = UiTheme.fs(font_size)
 	ls.font_color = color
 	ls.outline_size = maxi(4, int(font_size * 0.18))
 	ls.outline_color = UiTheme.INK
@@ -65,7 +65,7 @@ func add_button(text: String, key: String, on_press: Callable) -> Button:
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = BUTTON_SIZE
-	b.add_theme_font_size_override("font_size", 30)
+	b.add_theme_font_size_override("font_size", UiTheme.fs(30))
 	b.pressed.connect(func() -> void: get_tree().call_group("ui_click", "play"))
 	b.pressed.connect(on_press)
 	column.add_child(b)

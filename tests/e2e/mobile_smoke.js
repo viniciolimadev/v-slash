@@ -1,5 +1,5 @@
 // Teste de ponta a ponta no navegador, emulando um celular na horizontal com toque.
-// Abre a versão Web e percorre título → opções → escolha do bot → tutorial (pular) → partida;
+// Abre a versão Web e percorre consentimento → título → opções/privacidade → escolha do bot → tutorial (pular) → partida;
 // na partida arrasta o analógico, escolhe o saque flutuante, saca e confere (pelos pixels da tela) que o jogador
 // azul realmente se moveu; registra o fps; depois pausa e sai para o menu. Por fim abre uma partida 2v2.
 // O jogo publica a tela atual e a posição dos botões em window.__vs (scripts/ui/e2e_hooks.gd).
@@ -112,12 +112,22 @@ async function playerCenter(decoder, png) {
     return ok;
   };
 
+  // 1ª abertura: estatísticas anônimas → "Não enviar"
+  await screenIs('consent');
+  await shot('0a-consentimento');
+  await tap('consent/no');
+
   // menus
   await screenIs('title');
   await shot('0-titulo');
   await tap('title/options');
   await screenIs('options');
   await shot('0b-opcoes');
+  await tap('options/privacy');
+  await screenIs('privacy');
+  await shot('0c-privacidade');
+  await tap('privacy/back');
+  await screenIs('options');
   await tap('options/back');
   await screenIs('title');
   await tap('title/play');
@@ -202,6 +212,24 @@ async function playerCenter(decoder, png) {
   await screenIs('pause');
   await tap('pause/quit');
   await screenIs('title');
+
+  // idioma: Opções → Idioma troca para inglês e o título fica em inglês
+  await tap('title/options');
+  await screenIs('options');
+  const lang0 = await page.evaluate(() => window.__vs.lang);
+  await tap('options/lang');
+  await screenIs('options');
+  await tap('options/back');
+  await screenIs('title');
+  await shot('12-titulo-outro-idioma');
+  const lang1 = await page.evaluate(() => window.__vs.lang);
+  check(lang0 && lang1 && lang0 !== lang1 && /^(en|pt_BR)$/.test(lang1), `idioma trocado (${lang0} → ${lang1})`);
+  if (lang1 !== 'en') {          // navegador em inglês começa em en: volta uma vez para pt e outra para en
+    await tap('title/options'); await screenIs('options'); await tap('options/lang'); await screenIs('options');
+    await tap('options/back'); await screenIs('title');
+  }
+  const play = await page.evaluate(() => window.__vs['title/play.text']);
+  check(play === 'PLAY', `título em inglês (JOGAR → ${play})`);
 
   check(errors.length === 0, 'sem erros no console' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   console.log('prints em ' + outDir);

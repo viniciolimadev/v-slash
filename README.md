@@ -1,10 +1,11 @@
-# Vôlei Mobile — Fase 4
+# Vôlei Mobile — 1.0
 
 Vôlei 1v1 contra bot: **bola cinemática + anel de timing + gesto segura → mira → solta**.
 Partida em **melhor de 3 sets de 15** (vantagem de 2), com título, escolha do bot, tutorial, pausa, opções e resultado; progresso salvo no aparelho.
 Fase 2: saque **por baixo / flutuante / viagem**, **bloqueio**, **largada**, **peixinho** e stamina (experimento, desligada).
 Fase 3: modo **2v2** (quadra 8 × 8, parceiro IA): você controla sempre quem vai tocar na bola; ninguém toca duas vezes seguidas.
 Fase 4: **praia** low-poly com jogadores animados (esqueleto, 14 clipes no tempo do toque), torcida, rastro/areia/tremor, sons e músicas, tema próprio com a fonte Fredoka.
+Fase 5: **português e inglês**, estatísticas **opcionais e anônimas** (pergunta na 1ª abertura; [política](https://viniciolimadev.github.io/v-slash/privacidade/)), modo daltônico, texto maior, tela Sobre e release assinado por tag ([docs/LANCAMENTO.md](docs/LANCAMENTO.md)).
 Modelos, quadra e ícones são gerados por código; sons e músicas por `tools/gen_audio.py` ([docs/ARTE.md](docs/ARTE.md)). Godot **4.7**, renderizador Compatibility (Android/iOS/Web).
 
 ## Abrir e jogar
@@ -41,7 +42,7 @@ Modelos, quadra e ícones são gerados por código; sons e músicas por `tools/g
 Timing ruim = bola menos precisa (e cortada mais fraca). Longe do anel = "LONGE", não toca.
 
 O HUD mostra o placar do set, os sets, **SET POINT / MATCH POINT**, o rally e o recorde.
-Opções (título ou pausa): sensibilidade da mira, volume de música e de efeitos, modo canhoto (joystick e botão trocam de lado), vibração.
+Opções (título ou pausa): sensibilidade da mira, volume de música e de efeitos, modo daltônico (anel com forma por ação e número nas costas), tamanho do texto, idioma, modo canhoto (joystick e botão trocam de lado), vibração e Privacidade (ver/desligar/apagar as estatísticas).
 
 ## Ajustar o feel → `scripts/core/tuning.gd`
 
@@ -108,6 +109,8 @@ godot -- --autoplay                                    # demo bot x bot
 godot -- --autoplay --fps                              # com contador de fps (médio e p1)
 godot -- --autoplay --no-views                         # só a lógica: sem modelos, praia, efeitos nem som
 python3 tools/gen_audio.py                             # regenera assets/audio (precisa de ffmpeg com libvorbis)
+python3 tools/gen_store_art.py                         # regenera ícone, imagem da loja e splash (Pillow)
+node --test server/telemetry/worker.test.js            # testes do backend da telemetria
 ```
 
 Teste no navegador emulando celular (título → opções → escolha → tutorial → partida → fps → pausa → menu → 2v2, com prints):
@@ -177,4 +180,4 @@ docs/                  roadmap, SDDs, padrão de trabalho, pipeline de arte
 
 ## Próximas fases
 
-Lançamento → Fase 5. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).
+Publicar a 1.0: [docs/LANCAMENTO.md](docs/LANCAMENTO.md) (chaves, Play Console, Cloudflare, itch.io) e [docs/CHECKLIST-RELEASE.md](docs/CHECKLIST-RELEASE.md). Uma tag `v*` gera APK/AAB assinados. Plano completo em [docs/ROADMAP.md](docs/ROADMAP.md) e design em [docs/SDD.md](docs/SDD.md).

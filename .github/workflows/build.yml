@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -84,6 +85,7 @@ jobs:
           mkdir -p export/web
           $GODOT --headless --export-release "Web" export/web/index.html
           test -f export/web/index.wasm
+          cp -r web/. export/web/        # páginas estáticas (política de privacidade)
 
       - name: Web size budget (RNF-4.03)
         run: |
@@ -96,6 +98,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+
+      - name: Telemetry backend tests
+        run: node --test server/telemetry/worker.test.js
 
       - name: Mobile e2e (touch, headless Chromium)
         run: |
@@ -146,3 +151,134 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Tag v* (ex.: v1.0.0): APK + AAB release assinados, GitHub Release e, se houver segredos,
+  # trilha interna da Play e itch.io. Segredos e variáveis: docs/SDD-fase-5.md (3.1) e docs/LANCAMENTO.md.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      HAS_PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+      HAS_BUTLER: ${{ secrets.BUTLER_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-stable
+
+      - name: Install Godot + export templates
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          curl -sSL -o godot.zip "$GODOT_URL/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip -d ~/godot && rm godot.zip
+          curl -sSL -o tpl.tpz "$GODOT_URL/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q -j tpl.tpz 'templates/web_nothreads_*' 'templates/android_*' 'templates/version.txt' \
+            -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          rm tpl.tpz
+
+      - name: Version from tag
+        env:
+          TELEMETRY_URL: ${{ vars.TELEMETRY_URL }}
+        run: |
+          echo "GODOT=$HOME/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" >> "$GITHUB_ENV"
+          name="${GITHUB_REF_NAME#v}"
+          echo "VERSION_NAME=$name" >> "$GITHUB_ENV"
+          tools/set_version.sh $(( GITHUB_RUN_NUMBER + 100 )) "$name" "$TELEMETRY_URL"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Keystore and Android settings
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Falta o segredo ANDROID_KEYSTORE_B64 (upload key). Ver docs/LANCAMENTO.md."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          keytool -genkeypair -keystore debug.keystore -storepass android -keypass android \
+            -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
+          mkdir -p ~/.config/godot
+          cat > ~/.config/godot/editor_settings-${GODOT_VERSION}.tres <<TRES
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$PWD/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          TRES
+
+      - name: Import + Android build template
+        run: |
+          mkdir -p export && touch export/.gdignore
+          $GODOT --headless --import || true
+          $GODOT --headless --install-android-build-template
+
+      - name: Export signed APK + AAB
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ runner.temp }}/release.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          mkdir -p export/android
+          apk="export/android/volei-mobile-$VERSION_NAME.apk"
+          aab="export/android/volei-mobile-$VERSION_NAME.aab"
+          $GODOT --headless --export-release "Android" "$apk"
+          $GODOT --headless --export-release "Android Release" "$aab"
+          test -f "$apk" && test -f "$aab"
+          # assinatura e versão conferidas (RF-5.01)
+          signer=$(ls "$ANDROID_SDK_ROOT"/build-tools/*/apksigner | sort -V | tail -1)
+          "$signer" verify --print-certs "$apk" | head -3
+          jarsigner -verify "$aab" | tail -1
+          aapt=$(ls "$ANDROID_SDK_ROOT"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$aapt" dump badging "$apk" | grep -o "versionCode='[0-9]*' versionName='[^']*'"
+          "$aapt" dump badging "$apk" | grep -q "versionName='$VERSION_NAME'"
+
+      - name: Export Web
+        run: |
+          mkdir -p export/web
+          $GODOT --headless --export-release "Web" export/web/index.html
+          cp -r web/. export/web/
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" export/android/*.apk export/android/*.aab \
+            --title "Vôlei Mobile $VERSION_NAME" --generate-notes
+
+      - name: Play Console (trilha interna)
+        if: env.HAS_PLAY == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.viniciolimadev.voleimobile
+          releaseFiles: export/android/volei-mobile-${{ env.VERSION_NAME }}.aab
+          track: internal
+          # app ainda não publicado só aceita rascunho; depois do 1º envio revisado, troque para completed
+          status: ${{ vars.PLAY_RELEASE_STATUS || 'draft' }}
+
+      - name: itch.io (HTML5)
+        if: env.HAS_BUTLER == 'true'
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          curl -sSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d butler && chmod +x butler/butler
+          ./butler/butler push export/web "${{ vars.ITCH_TARGET || 'viniciolimadev/volei-mobile' }}:html5" \
+            --userversion "$VERSION_NAME"

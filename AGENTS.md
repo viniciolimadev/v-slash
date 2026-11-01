@@ -14,7 +14,7 @@ Jogo de vôlei para celular em **Godot 4.7 / GDScript**, renderer Compatibility 
 | [docs/SDD.md](docs/SDD.md) | arquitetura, invariantes, ADRs, decisões de produto (como) |
 | `docs/SDD-fase-N.md` | design de implementação da fase atual — **a fonte da verdade para a tarefa** |
 
-Fase atual: **Fase 4 implementada** ([docs/SDD-fase-4.md](docs/SDD-fase-4.md); falta o teste no celular); a **Fase 5** segue [docs/SDD-fase-5.md](docs/SDD-fase-5.md).
+Fase atual: **Fase 5 com código pronto** ([docs/SDD-fase-5.md](docs/SDD-fase-5.md)); a publicação segue [docs/LANCAMENTO.md](docs/LANCAMENTO.md) (passos do dono). Textos de tela passam por `tr()` com linha em `assets/i18n/strings.csv`.
 
 ## Mapa do código
 
@@ -30,7 +30,9 @@ scripts/core/team.gd       jogadores do time e ordem de saque
 scripts/entities/          Player, Ball (lógica), Court (quadra simples)
 scripts/view/              views (ADR-09): PlayerViewModel, AnimTable, CourtView, Fx, Sfx
 scripts/ui/                TouchControls, Hud, Markers, UiTheme, Icons
-assets/                    fonte e áudio (gerado por tools/gen_audio.py)
+assets/                    fonte, áudio (tools/gen_audio.py) e traduções (assets/i18n/strings.csv)
+scripts/app/               App, telemetria, idioma, ErrorWatch
+server/telemetry/          backend da telemetria (Worker + D1, node --test)
 tests/run_tests.gd         testes headless
 tests/e2e/mobile_smoke.js  e2e no navegador com toque emulado
 ```

@@ -1,0 +1,11 @@
+# Deploy (pelo dono): npx wrangler d1 create volei-telemetry  → copie o database_id abaixo
+#                     npx wrangler d1 execute volei-telemetry --remote --file=schema.sql
+#                     npx wrangler deploy
+name = "volei-telemetry"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "volei-telemetry"
+database_id = "COLOQUE-O-ID-DO-D1-AQUI"
