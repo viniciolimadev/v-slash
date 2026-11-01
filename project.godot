@@ -16,6 +16,10 @@ config/description="Fase 4: praia low-poly com personagens animados, torcida, ef
 run/main_scene="res://scenes/app.tscn"
 config/quit_on_go_back=false
 config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.png"
+boot_splash/bg_color=Color(0.1, 0.36, 0.56, 1)
+boot_splash/image="res://assets/ui/splash.png"
+boot_splash/fullsize=true
 
 [display]
 
