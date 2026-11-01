@@ -22,6 +22,8 @@ func _run() -> void:
 	_test_anim_sync()
 	print("== efeitos ==")
 	_test_fx()
+	print("== sons ==")
+	_test_sfx_events()
 	print("== câmera (enquadramento) ==")
 	_test_camera()
 	print("== bot x bot (20 min simulados) ==")
@@ -264,6 +266,56 @@ func _test_fx() -> void:
 	_check(seen["shake"] > 0 and fx.camera_fx.amp <= Tuning.SHAKE_AMP, "cortada treme a câmera (até SHAKE_AMP)")
 	_check(fx.bursts > 0 and seen["sand"] > 0, "PERFEITO brilha no chão e a bola levanta areia")
 	_check(cam.global_transform == rest, "o tremor não mexe no enquadramento (só h/v_offset)")
+	_free_main(main)
+
+
+## Cada sinal do Game pede um som que existe; o toque varia por ação e grau.
+func _test_sfx_events() -> void:
+	var main := _make_main(true)
+	var game: Game = main.get("game")
+	var sfx: Sfx = main.get("sfx")
+	var heard: Array[String] = []
+	sfx.sink = func(n: String, _db: float) -> void: heard.append(n)
+	var p: Player = game.players[0]
+	var cases := [
+		["toque (manchete perfeita)", func() -> void:
+			game.last_kind = Game.Act.RECEIVE
+			game.touch_made.emit(p, "PERFEITO!", 1.0), "bump_perfect"],
+		["toque (cortada ruim)", func() -> void:
+			game.last_kind = Game.Act.ATTACK
+			game.touch_made.emit(p, "CEDO", 0.35), "spike_bad"],
+		["levantamento bom", func() -> void:
+			game.last_kind = Game.Act.SET_BALL
+			game.touch_made.emit(p, "BOM", 0.7), "set_good"],
+		["bloqueio", func() -> void:
+			game.last_kind = Game.Act.BLOCK
+			game.touch_made.emit(p, "BOM", 0.7), "block"],
+		["saque", func() -> void:
+			game.last_kind = Game.Act.SERVE
+			game.touch_made.emit(p, "SAQUE", 0.9), "serve"],
+		["tentativa sem bola", func() -> void: game.whiffed.emit(p, "CEDO"), "whiff"],
+		["rede", func() -> void: game.ball_event.emit(BallSim.Ev.NET, Vector3.ZERO), "net"],
+		["antena", func() -> void: game.ball_event.emit(BallSim.Ev.ANTENNA, Vector3.ZERO), "antenna"],
+		["bola no chão", func() -> void: game.ball_event.emit(BallSim.Ev.LAND, Vector3.ZERO), "land"],
+		["peixinho", func() -> void: game.action_used.emit(p, Game.Act.DIVE), "dive"],
+		["ponto", func() -> void: game.point_scored.emit(0, "Fora"), "whistle"],
+		["fim de set", func() -> void: game.set_over.emit(0, 0, Vector2i(15, 10)), "whistle_long"],
+		["fim de partida", func() -> void: game.match_over.emit(0), "match_win"],
+	]
+	var missing: Array[String] = []
+	for c in cases:
+		heard.clear()
+		(c[1] as Callable).call()
+		if not (c[2] in heard):
+			missing.append(str(c[0]))
+	_check(missing.is_empty(), "todo evento do jogo pede o seu som (faltou: %s)" % [missing])
+	var files: Array[String] = []
+	for n in sfx.requests:
+		if sfx.stream(n) == null:
+			files.append(n)
+	_check(files.is_empty() and sfx.requests.size() >= cases.size(), "todo som pedido existe em assets/audio/sfx (sem arquivo: %s)" % [files])
+	_check(sfx.stream("crowd_loop") != null and ResourceLoader.exists("res://assets/audio/music/match.ogg")
+			and ResourceLoader.exists("res://assets/audio/music/menu.ogg"), "torcida contínua e as duas músicas existem")
 	_free_main(main)
 
 
@@ -1485,6 +1537,25 @@ func _test_save() -> void:
 	fresh.record_result(duo)
 	_check(fresh.rec(1).unlocked_level == 1 and fresh.rec(1).wins[0] == 1 and fresh.rec(0).wins[0] == 2,
 			"vitória no 2v2 conta e libera só no 2v2")
+	# save da versão 3 (sem volumes): mantém tudo e cria os volumes padrão
+	var v3 := ConfigFile.new()
+	v3.set_value("meta", "version", 3)
+	v3.set_value("progress", "unlocked_level_2v2", 1)
+	v3.set_value("records", "wins_1v1", [2, 1, 0])
+	v3.set_value("progress", "tutorial_done", true)
+	v3.set_value("options", "aim_sens", 1.3)
+	v3.save(path)
+	r = SaveData.new(path)
+	r.load_file()
+	_check(r.rec(1).unlocked_level == 1 and r.rec(0).wins == [2, 1, 0] and r.tutorial_done and is_equal_approx(r.aim_sens, 1.3)
+			and is_equal_approx(r.music_vol, 0.8) and is_equal_approx(r.sfx_vol, 1.0),
+			"migração da versão 3: mantém tudo e cria volumes padrão")
+	r.music_vol = 0.25
+	r.sfx_vol = 0.0
+	r.save_file()
+	var r4 := SaveData.new(path)
+	r4.load_file()
+	_check(is_equal_approx(r4.music_vol, 0.25) and r4.sfx_vol == 0.0, "volumes de música e efeitos gravados (save v4)")
 	DirAccess.remove_absolute(path)
 
 

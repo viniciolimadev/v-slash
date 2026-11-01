@@ -28,6 +28,7 @@ var markers: Markers
 var cam: Camera3D
 var court_view: CourtView = null    # praia (Fase 4); null com --no-views ou USE_MODEL_VIEWS = false
 var fx: Fx = null                   # efeitos (rastro, areia, brilho, tremor); null com --no-views
+var sfx: Sfx = null                 # sons e música da partida; null com --no-views
 var stats := MatchStats.new()
 var pause_menu: PauseMenu
 var tutorial: TutorialDirector = null
@@ -185,6 +186,9 @@ func _attach_views(ball: Ball) -> void:
 	fx = Fx.new()
 	add_child(fx)
 	fx.bind(game, cam)
+	sfx = Sfx.new()
+	add_child(sfx)
+	sfx.bind(game, human.team)
 
 
 ## Primeira partida 2v2: faixa explicando a troca de controle (uma vez por save).
@@ -311,8 +315,18 @@ func _on_touch(p: Player, grade: String, quality: float) -> void:
 		return
 	var perfect := quality >= 1.0
 	hud.popup(grade, Color(0.45, 1.0, 0.55) if perfect else Color(1.0, 0.95, 0.65), perfect)
-	if config.vibration and OS.has_feature("mobile"):
-		Input.vibrate_handheld(45 if perfect else 20)
+	if game.last_kind == Game.Act.BLOCK:
+		_vibrate(Tuning.VIBRATE_BLOCK)
+	else:
+		_vibrate(Tuning.VIBRATE_PERFECT if perfect else Tuning.VIBRATE_GOOD)
+
+
+func _vibrate(ms: int, times := 1) -> void:
+	if not config.vibration or not OS.has_feature("mobile"):
+		return
+	Input.vibrate_handheld(ms)
+	if times > 1:
+		get_tree().create_timer(0.1).timeout.connect(func() -> void: _vibrate(ms, times - 1))
 
 
 func _on_whiff(p: Player, why: String) -> void:
@@ -325,6 +339,7 @@ func _on_point(team: int, reason: String) -> void:
 		court_view.react(0.0, 1.2)
 	if team == human.team:
 		hud.message("Ponto seu! " + reason, Color(0.55, 1.0, 0.65))
+		_vibrate(Tuning.VIBRATE_POINT, 2)
 	else:
 		hud.message("Ponto do bot. " + reason, Color(1.0, 0.62, 0.52))
 

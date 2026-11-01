@@ -56,6 +56,7 @@ func add_button(text: String, key: String, on_press: Callable) -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = BUTTON_SIZE
 	b.add_theme_font_size_override("font_size", 30)
+	b.pressed.connect(func() -> void: get_tree().call_group("ui_click", "play"))
 	b.pressed.connect(on_press)
 	column.add_child(b)
 	E2eHooks.publish(screen_name + "/" + key, b)
