@@ -11,6 +11,9 @@ const NET_HEIGHT := 2.43
 const NET_OVERHANG := 0.7          # m que a rede passa das antenas, de cada lado
 const LINE_TOLERANCE := 0.05       # bola na linha = dentro
 
+# --- Visual (Fase 4) ---
+const USE_MODEL_VIEWS := true      # false = formas simples das Fases 0–3 (PlayerViewSimple, quadra lisa)
+
 # --- Partida ---
 const SET_POINTS := 15
 const SETS_TO_WIN := 2             # melhor de 3

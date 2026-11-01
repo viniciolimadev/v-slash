@@ -18,6 +18,8 @@ func _run() -> void:
 	_test_physics()
 	print("== views não mudam a lógica (ADR-09) ==")
 	_test_views_do_not_change_logic()
+	print("== animação sincronizada com o contato ==")
+	_test_anim_sync()
 	print("== câmera (enquadramento) ==")
 	_test_camera()
 	print("== bot x bot (20 min simulados) ==")
@@ -181,6 +183,59 @@ func _test_views_do_not_change_logic() -> void:
 			_free_main(main)
 		var n := traces[0].count("\n") + 1
 		_check(traces[0] == traces[1] and n > 20, "%s: 5 min bot x bot iguais com e sem views (%d pontos)" % ["2v2" if two else "1v1", n])
+
+
+func _model_view(p: Player) -> PlayerViewModel:
+	for c in p.get_children():
+		if c is PlayerViewModel:
+			return c
+	return null
+
+
+## RF-4.02: o clipe agendado põe a mão na bola em plan.t (± 1 quadro); toque cedo mistura, não salta.
+func _test_anim_sync() -> void:
+	var main := _make_main(true)
+	var game: Game = main.get("game")
+	game.set_bot_level(2)                   # o Difícil saca flutuante e viagem (anel de saque)
+	game.rng.seed = 5
+	var worst := {}
+	var seen := -1
+	for _i in int(240.0 / DT):
+		game.tick(DT)
+		if game.plan == null or game.plan_id == seen or game.plan.player == null:
+			continue
+		seen = game.plan_id
+		var v := _model_view(game.plan.player)
+		v.sync_plan()
+		var clip := AnimTable.clip_for(game.plan.act, game.serve_type[game.plan.team])
+		var err := absf(v.shot_start + AnimTable.contact(clip) - game.plan.t)
+		worst[clip] = maxf(float(worst.get(clip, 0.0)), err)
+	print("  pior erro por clipe (s): %s" % worst)
+	var ok := worst.size() >= 4
+	for k in worst:
+		ok = ok and float(worst[k]) <= 1.0 / 60.0
+	_check(ok, "manchete, toque, cortada e saque com lançamento: contato no tempo ideal ± 1 quadro (%d clipes)" % worst.size())
+	# toque 0,1 s antes do ideal: o clipe se corrige com mistura curta, sem salto de pose
+	var p: Player = game.players[0]
+	var v := _model_view(p)
+	game.plan = ContactPlan.new(p.team, 1, Game.Act.SET_BALL, game.time + 0.25, p.position + Vector3(0, 2.2, 0), p)
+	game.plan_id += 1
+	v.sync_plan()
+	var jump := 0.0
+	var before := {}
+	for i in 20:
+		game.time += DT
+		if i == 8:
+			v._on_swung(Game.Act.SET_BALL, game.time)
+		v._animate(DT)
+		if i >= 8 and i <= 10:
+			jump = maxf(jump, AnimTable.distance(before, v.pose))
+		before = v.pose
+	_check(absf(v.shot_start + AnimTable.contact("set") - (game.time - 11 * DT)) < 1e-4,
+			"toque cedo move o contato do clipe para o instante real")
+	var naive := AnimTable.distance(AnimTable.sample("set", 0.3 - 7 * DT), AnimTable.sample("set", 0.3))
+	_check(jump < 10.0 and naive > 30.0, "e a pose não salta: %.1f° no quadro da correção (sem mistura: %.1f°)" % [jump, naive])
+	_free_main(main)
 
 
 func _test_camera() -> void:

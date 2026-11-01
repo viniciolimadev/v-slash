@@ -829,7 +829,7 @@ func _auto_jumps() -> void:
 		return
 	var at := plan.pos
 	var who := plan.player
-	if who == null or not who.is_grounded() or not (who.holding or _has_pending(who)):
+	if who == null or not who.is_grounded() or not (who.holding or has_pending(who)):
 		return
 	if Vector2(at.x - who.position.x, at.z - who.position.z).length() <= Tuning.REACH + 1.2:
 		who.start_jump(at)
@@ -840,7 +840,7 @@ func _in_rally() -> bool:
 	return state == State.PLAY or state == State.SERVE_TOSS
 
 
-func _has_pending(p: Player) -> bool:
+func has_pending(p: Player) -> bool:
 	for item in _pending:
 		if item["player"] == p:
 			return true

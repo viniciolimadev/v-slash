@@ -162,7 +162,13 @@ func _build_match() -> void:
 ## Views (ADR-09): filhas da lógica, só observam. Sem elas (--no-views) a partida é a mesma.
 func _attach_views(ball: Ball) -> void:
 	for p in game.players:
-		var v: PlayerView = PlayerViewSimple.new()
+		var v: PlayerView
+		if Tuning.USE_MODEL_VIEWS:
+			var m := PlayerViewModel.new()
+			m.uniform = game.teams[p.team].players.find(p)     # o segundo da dupla usa o 2º uniforme
+			v = m
+		else:
+			v = PlayerViewSimple.new()
 		p.add_child(v)
 		v.bind(p, game)
 	var bv := BallView.new()
