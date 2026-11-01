@@ -86,6 +86,8 @@ func _run() -> void:
 	_test_tutorial()
 	print("== tema: alvos de toque ==")
 	_test_theme_targets()
+	print("== telemetria (opcional e anônima) ==")
+	_test_telemetry()
 	print("== idiomas ==")
 	_test_i18n()
 	print("== fluxo de telas (App) ==")
@@ -1767,6 +1769,9 @@ func _test_theme_targets() -> void:
 		"escolha": func() -> void: app.call("show_level_select"),
 		"opções": func() -> void: app.call("show_options", func() -> void: pass),
 		"resultado": func() -> void: app.call("show_result", MatchResult.new(0, 0, [Vector2i(15, 9)], st)),
+		"consentimento": func() -> void: app.call("show_consent"),
+		"privacidade": func() -> void: app.call("show_privacy", func() -> void: pass),
+		"sobre": func() -> void: app.call("show_about"),
 	}
 	for k in opens:
 		(opens[k] as Callable).call()
@@ -1789,6 +1794,65 @@ func _test_theme_targets() -> void:
 	root.remove_child(app)
 	app.free()
 	DirAccess.remove_absolute(path)
+
+
+## RF-5.03/5.04/5.05: sem consentimento nada é guardado; match_end com exatamente os campos da
+## política; fila limitada; envio só tira da fila com resposta 2xx; apagar troca o id.
+func _test_telemetry() -> void:
+	var path := "user://test_tel.cfg"
+	var qpath := path + ".queue.json"
+	for f in [path, qpath]:
+		DirAccess.remove_absolute(f)
+	var save := SaveData.new(path)
+	var tel := Telemetry.new(save, qpath)
+	var st := MatchStats.new()
+	st.best_rally = 9
+	st.rallies = [3, 5, 7]
+	st.points_by_reason = [{"Fora": 2}, {"Bola no chão": 9, "Rede": 1}]
+	st.serves = [[4, 2, 1], [6, 0, 0]]
+	st.blocks = [3, 0]
+	st.dives = [1, 2]
+	var r := MatchResult.new(0, 1, [Vector2i(15, 12), Vector2i(13, 15), Vector2i(15, 9)], st)
+	tel.record(tel.match_end(r))
+	tel.record(tel.session_start())
+	_check(save.consent == -1 and tel.queue.is_empty() and not FileAccess.file_exists(qpath),
+			"sem consentimento nada é enfileirado nem gravado")
+	tel.set_consent(true)
+	var id := save.install_id
+	_check(RegEx.create_from_string("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$").search(id) != null,
+			"consentimento cria um id aleatório (UUID v4)")
+	var e := tel.match_end(r)
+	var keys: Array = e.keys()
+	keys.sort()
+	var want: Array = Telemetry.MATCH_FIELDS.duplicate()
+	want.sort()
+	_check(keys == want, "match_end tem exatamente os campos da política (%d)" % keys.size())
+	_check(e["sets"] == [[15, 12], [13, 15], [15, 9]] and e["won"] == true and e["mode"] == "1v1" and e["rally_avg"] == 5.0
+			and e["points_lost_by"] == {"Bola no chão": 9, "Rede": 1} and e["serve_types"] == [4, 2, 1] and e["blocks"] == 3
+			and e["dives"] == 1 and (e["options"] as Dictionary).keys().size() == 2, "valores do evento vêm da partida (time 0 = você)")
+	for i in 60:
+		tel.record(tel.session_start())
+	_check(tel.queue.size() == Telemetry.MAX_QUEUE, "fila limitada a %d eventos" % Telemetry.MAX_QUEUE)
+	var again := Telemetry.new(save, qpath)
+	_check(again.queue.size() == Telemetry.MAX_QUEUE, "fila sobrevive a fechar o jogo (arquivo)")
+	tel.url = ""
+	_check(not tel.flush(null), "sem URL configurada nada é enviado")
+	tel.sending = 10
+	tel.on_sent(HTTPRequest.RESULT_CANT_CONNECT, 0)
+	_check(tel.queue.size() == Telemetry.MAX_QUEUE and tel.sending == 0, "sem rede: o lote fica na fila")
+	tel.sending = 10
+	tel.on_sent(HTTPRequest.RESULT_SUCCESS, 200)
+	_check(tel.queue.size() == Telemetry.MAX_QUEUE - 10, "resposta 2xx tira só o lote enviado")
+	var body := tel.forget()
+	_check(body.get("install_id") == id and save.install_id != id and save.install_id != "" and tel.queue.is_empty(),
+			"apagar: pedido de exclusão do id antigo, fila vazia e id novo")
+	tel.set_consent(false)
+	tel.record(tel.session_start())
+	var back := SaveData.new(path)
+	back.load_file()
+	_check(back.consent == 0 and back.install_id == "" and tel.queue.is_empty(), "desligar apaga o id e para de registrar (save v5)")
+	for f in [path, qpath]:
+		DirAccess.remove_absolute(f)
 
 
 func _csv_strings() -> Dictionary:
@@ -1875,7 +1939,9 @@ func _test_i18n() -> void:
 	st.points_by_reason = [{"Bola no chão": 3}, {}]
 	for open in [func() -> void: app.call("show_title"), func() -> void: app.call("show_level_select"),
 			func() -> void: app.call("show_options", func() -> void: pass),
-			func() -> void: app.call("show_result", MatchResult.new(0, 0, [Vector2i(15, 9)], st))]:
+			func() -> void: app.call("show_result", MatchResult.new(0, 0, [Vector2i(15, 9)], st)),
+			func() -> void: app.call("show_consent"), func() -> void: app.call("show_privacy", func() -> void: pass),
+			func() -> void: app.call("show_about")]:
 		open.call()
 		for t in _texts(app.get("screen"), []):
 			for k in strings:
@@ -1899,7 +1965,9 @@ func _test_app_flow() -> void:
 	var save := SaveData.new(path)
 	app.set("save", save)
 	root.add_child(app)
-	_check(app.get("screen") is TitleScreen, "app abre no título")
+	_check(app.get("screen") is ConsentScreen, "save novo: app pergunta das estatísticas antes do título")
+	(app.get("screen") as ConsentScreen).chosen.emit(false)
+	_check(app.get("screen") is TitleScreen and save.consent == 0 and save.install_id == "", "\"Não enviar\" leva ao título sem id")
 	app.call("show_level_select")
 	var btns := _buttons(app.get("screen"))
 	_check(btns.size() == 4 and not btns[0].disabled and btns[1].disabled and btns[2].disabled,

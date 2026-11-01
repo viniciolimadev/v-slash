@@ -5,6 +5,7 @@ extends Screen
 signal play_pressed
 signal tutorial_pressed
 signal options_pressed
+signal about_pressed
 
 var save: SaveData
 
@@ -21,3 +22,4 @@ func _build() -> void:
 	add_button(tr("JOGAR"), "play", func() -> void: play_pressed.emit())
 	add_button(tr("TUTORIAL"), "tutorial", func() -> void: tutorial_pressed.emit())
 	add_button(tr("OPÇÕES"), "options", func() -> void: options_pressed.emit())
+	add_button(tr("SOBRE"), "about", func() -> void: about_pressed.emit())

@@ -31,6 +31,7 @@ var human: Player
 var markers: Markers
 var step: int = Step.MOVE
 var fails := 0
+var fails_by_step: Array[int] = [0, 0, 0, 0]   # erros em cada passo (telemetria: onde mais se erra)
 
 var _ok := false                    # objetivo do passo cumprido nesta bola
 var _zone := ""                     # zona em que a mira estava antes de sacar
@@ -142,6 +143,7 @@ func _on_point(_team: int, _why: String) -> void:
 		_next()
 	else:
 		fails += 1
+		fails_by_step[step] += 1
 		_show_text()
 	_ok = false
 

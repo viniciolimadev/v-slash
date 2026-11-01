@@ -99,6 +99,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Telemetry backend tests
+        run: node --test server/telemetry/worker.test.js
+
       - name: Mobile e2e (touch, headless Chromium)
         run: |
           # instalado fora do projeto: senão o Godot importa node_modules e põe no APK

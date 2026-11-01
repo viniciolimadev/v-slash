@@ -30,6 +30,8 @@ var serve_type := ServeType.Kind.UNDER   # último tipo de saque escolhido
 var music_vol := 0.8                # 0..1 (barramento Music)
 var sfx_vol := 1.0                  # 0..1 (barramento SFX)
 var lang := ""                      # "" = idioma do aparelho; "pt_BR" ou "en" (Lang)
+var consent := -1                   # estatísticas anônimas: -1 = ainda não perguntou, 0 = não, 1 = sim
+var install_id := ""                # id aleatório local (só existe com consentimento; apagar = novo id)
 
 
 func _init(p_path := DEFAULT_PATH) -> void:
@@ -60,6 +62,8 @@ func load_file() -> void:
 	# saves até a versão 3 não têm volume: ficam os padrões
 	music_vol = _unit(cfg, "music_vol", 0.8)
 	sfx_vol = _unit(cfg, "sfx_vol", 1.0)
+	consent = clampi(_int(cfg, "privacy", "consent", -1), -1, 1)
+	install_id = str(cfg.get_value("privacy", "install_id", "")) if consent == 1 else ""
 	var l: Variant = cfg.get_value("options", "lang", "")
 	lang = str(l) if str(l) in Lang.LOCALES else ""
 
@@ -84,6 +88,8 @@ func save_file() -> Error:
 	cfg.set_value("options", "music_vol", music_vol)
 	cfg.set_value("options", "sfx_vol", sfx_vol)
 	cfg.set_value("options", "lang", lang)
+	cfg.set_value("privacy", "consent", consent)
+	cfg.set_value("privacy", "install_id", install_id)
 	var tmp := path + ".tmp"
 	var err := cfg.save(tmp)
 	if err != OK:

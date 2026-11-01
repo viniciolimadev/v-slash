@@ -83,3 +83,19 @@ Dica: solte no instante em que os anéis se encostam (o botão fica verde).,Dica
 Dica: arraste para a esquerda e para cima até a mira grudar em FUNDO ESQ.,Dica: arraste para a esquerda e para cima até a mira grudar em FUNDO ESQ.,Tip: drag left and up until the aim snaps to DEEP LEFT.
 Isso! Esse é o lugar do próximo toque.,Isso! Esse é o lugar do próximo toque.,That's it! That's where the next touch happens.
 Boa! %s,Boa! %s,Nice! %s
+Estatísticas anônimas,Estatísticas anônimas,Anonymous statistics
+"Podemos enviar, ao fim de cada partida, números do jogo (duração, placar, rally,","Podemos enviar, ao fim de cada partida, números do jogo (duração, placar, rally,","May we send, after each match, game numbers (length, score, rally,"
+onde os pontos foram perdidos) para equilibrar os bots? Nada pessoal nem do aparelho.,onde os pontos foram perdidos) para equilibrar os bots? Nada pessoal nem do aparelho.,where points were lost) to balance the bots? Nothing personal or about your device.
+Você pode desligar ou apagar tudo em Opções → Privacidade.,Você pode desligar ou apagar tudo em Opções → Privacidade.,You can turn it off or erase everything in Options → Privacy.
+NÃO ENVIAR,NÃO ENVIAR,DON'T SEND
+PODE ENVIAR,PODE ENVIAR,SEND
+PRIVACIDADE,PRIVACIDADE,PRIVACY
+"Enviado ao fim da partida: versão, plataforma, modo, nível, placar, duração,","Enviado ao fim da partida: versão, plataforma, modo, nível, placar, duração,","Sent after a match: version, platform, mode, level, score, length,"
+"rally, % de perfeitos, motivos dos pontos, saques, bloqueios, peixinhos e 2 opções.","rally, % de perfeitos, motivos dos pontos, saques, bloqueios, peixinhos e 2 opções.","rally, % perfect, point reasons, serves, blocks, dives and 2 options."
+"Com um id aleatório deste aparelho, que muda quando você apaga os dados.","Com um id aleatório deste aparelho, que muda quando você apaga os dados.","With a random id for this install, which changes when you erase your data."
+Enviar estatísticas,Enviar estatísticas,Send statistics
+APAGAR MEUS DADOS,APAGAR MEUS DADOS,ERASE MY DATA
+POLÍTICA DE PRIVACIDADE,POLÍTICA DE PRIVACIDADE,PRIVACY POLICY
+Versão %s,Versão %s,Version %s
+"Jogo, modelos, sons e músicas: Vinicio Lima (feitos por código)","Jogo, modelos, sons e músicas: Vinicio Lima (feitos por código)","Game, models, sounds and music: Vinicio Lima (made with code)"
+Fonte Fredoka (SIL Open Font License) · Motor Godot Engine (MIT),Fonte Fredoka (SIL Open Font License) · Motor Godot Engine (MIT),Fredoka font (SIL Open Font License) · Godot Engine (MIT)

@@ -1,6 +1,6 @@
 class_name E2eHooks
 extends RefCounted
-## Só na versão Web: publica em window.__vs a tela atual e onde ficam os botões
+## Só na versão Web: publica em window.__vs a tela atual, o idioma e onde ficam os botões (e o texto deles)
 ## (em pixels CSS da página), para o teste e2e tocar neles sem adivinhar coordenadas.
 
 
@@ -10,7 +10,8 @@ static func enabled() -> bool:
 
 static func set_screen(screen_name: String) -> void:
 	if enabled():
-		JavaScriptBridge.eval("(window.__vs = window.__vs || {}).screen = '%s';" % screen_name, true)
+		JavaScriptBridge.eval("(window.__vs = window.__vs || {}).screen = '%s'; window.__vs.lang = '%s';"
+				% [screen_name, TranslationServer.get_locale()], true)
 
 
 ## Registra o centro de um controle com a chave `key` (ex.: "title/play").
@@ -25,3 +26,5 @@ static func publish(key: String, ctrl: Control) -> void:
 	JavaScriptBridge.eval(
 			"(window.__vs = window.__vs || {})['%s'] = {x: %f / devicePixelRatio, y: %f / devicePixelRatio};"
 			% [key, c.x, c.y], true)
+	if ctrl is Button:
+		JavaScriptBridge.eval("window.__vs['%s.text'] = %s;" % [key, JSON.stringify((ctrl as Button).text)], true)

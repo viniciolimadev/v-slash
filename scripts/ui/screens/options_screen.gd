@@ -6,6 +6,7 @@ extends Screen
 signal changed
 signal closed
 signal lang_changed
+signal privacy_pressed
 
 var save: SaveData
 
@@ -44,6 +45,10 @@ func _build() -> void:
 		lang_changed.emit())
 	_toggle(tr("Modo canhoto"), "left", save.left_handed, func(on: bool) -> void: save.left_handed = on)
 	_toggle(tr("Vibração"), "vibration", save.vibration, func(on: bool) -> void: save.vibration = on)
+	if privacy_pressed.get_connections().size() > 0:
+		add_button(tr("PRIVACIDADE"), "privacy", func() -> void:
+			save.save_file()
+			privacy_pressed.emit())
 	add_button(tr("VOLTAR"), "back", func() -> void:
 		save.save_file()
 		closed.emit())

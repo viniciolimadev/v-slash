@@ -9,6 +9,10 @@ var timing_errors: Array[int] = [0, 0]    # toques CEDO/TARDE + tentativas fora 
 var far: Array[int] = [0, 0]              # tentativas LONGE
 var points_by_reason: Array[Dictionary] = [{}, {}]
 var best_rally := 0
+var rallies: Array[int] = []              # toques de cada rally que terminou em ponto
+var serves: Array = [[0, 0, 0], [0, 0, 0]]    # por time: saques de cada ServeType.Kind
+var blocks: Array[int] = [0, 0]           # pulos de bloqueio
+var dives: Array[int] = [0, 0]            # peixinhos
 var started_at := 0.0                     # relógio de Game.time
 var ended_at := -1.0                      # -1 = partida em andamento
 
@@ -21,6 +25,12 @@ func attach(game: Game) -> void:
 	game.whiffed.connect(_on_whiff)
 	game.point_scored.connect(_on_point)
 	game.match_over.connect(_on_match_over)
+	game.served.connect(func(p: Player, kind: int, _g: String) -> void: serves[p.team][kind] += 1)
+	game.action_used.connect(func(p: Player, act: int) -> void:
+		if act == Game.Act.BLOCK:
+			blocks[p.team] += 1
+		elif act == Game.Act.DIVE:
+			dives[p.team] += 1)
 	reset()
 
 
@@ -33,8 +43,19 @@ func reset() -> void:
 	far = [0, 0]
 	points_by_reason = [{}, {}]
 	best_rally = 0
+	rallies = []
+	serves = [[0, 0, 0], [0, 0, 0]]
+	blocks = [0, 0]
+	dives = [0, 0]
 	started_at = _game.time if _game != null else 0.0
 	ended_at = -1.0
+
+
+func rally_avg() -> float:
+	var total := 0
+	for r in rallies:
+		total += r
+	return float(total) / maxf(rallies.size(), 1.0)
 
 
 func perfect_rate(team: int) -> float:
@@ -77,6 +98,7 @@ func _on_point(team: int, reason: String) -> void:
 	var d := points_by_reason[team]
 	d[reason] = int(d.get(reason, 0)) + 1
 	best_rally = maxi(best_rally, _game.rally_touches)
+	rallies.append(_game.rally_touches)
 
 
 func _on_match_over(_team: int) -> void:
