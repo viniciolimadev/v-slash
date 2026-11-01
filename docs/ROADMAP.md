@@ -70,7 +70,9 @@ Design detalhado: [SDD-fase-3.md](SDD-fase-3.md).
 
 ---
 
-## Fase 4 — Arte e som
+## Fase 4 — Arte e som ✅ (falta o teste no celular)
+
+Implementada em 2026-11-01 (versão 0.5.0): views separadas da lógica, jogadores low-poly com esqueleto e 14 clipes sincronizados com o contato, praia com torcida, efeitos, sons e músicas sintetizados, tema/fonte/ícones e medição de desempenho no CI. Números e pendências: [SDD-fase-4.md, seção 10](SDD-fase-4.md#10-resultado-fim-da-fase).
 
 **Meta:** trocar as formas simples por algo bonito sem perder 60 fps em Android médio (renderer Compatibility).
 Design detalhado: [SDD-fase-4.md](SDD-fase-4.md).

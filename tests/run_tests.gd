@@ -24,6 +24,8 @@ func _run() -> void:
 	_test_fx()
 	print("== sons ==")
 	_test_sfx_events()
+	print("== orçamento de desenho e medidor de fps ==")
+	_test_render_budget()
 	print("== câmera (enquadramento) ==")
 	_test_camera()
 	print("== bot x bot (20 min simulados) ==")
@@ -319,6 +321,62 @@ func _test_sfx_events() -> void:
 	_check(sfx.stream("crowd_loop") != null and ResourceLoader.exists("res://assets/audio/music/match.ogg")
 			and ResourceLoader.exists("res://assets/audio/music/menu.ogg"), "torcida contínua e as duas músicas existem")
 	_free_main(main)
+
+
+func _mesh_tris(m: Mesh) -> int:
+	var n := 0
+	if m == null:
+		return 0
+	for i in m.get_surface_count():
+		var arr := m.surface_get_arrays(i)
+		var idx: Variant = arr[Mesh.ARRAY_INDEX]
+		n += (idx as PackedInt32Array).size() / 3 if idx != null else (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+	return n
+
+
+## Soma chamadas de desenho (instâncias de geometria visíveis) e triângulos da cena.
+func _render_cost(n: Node, acc: Dictionary) -> Dictionary:
+	if n is Node3D and not (n as Node3D).is_visible_in_tree():
+		return acc
+	if n is MeshInstance3D and not ((n as MeshInstance3D).mesh is ImmediateMesh):
+		acc["draws"] += 1
+		acc["tris"] += _mesh_tris((n as MeshInstance3D).mesh)
+	elif n is MultiMeshInstance3D:
+		var mm := (n as MultiMeshInstance3D).multimesh
+		acc["draws"] += 1
+		acc["tris"] += mm.instance_count * _mesh_tris(mm.mesh)
+	elif n is CPUParticles3D:
+		acc["draws"] += 1
+		acc["tris"] += (n as CPUParticles3D).amount * 2
+	elif n is Label3D:
+		acc["draws"] += 1
+	for c in n.get_children():
+		_render_cost(c, acc)
+	return acc
+
+
+## RNF-4.02: ≤ 80 chamadas de desenho, ≤ 60 k triângulos, ≤ 5 k por personagem (pior caso: 2v2).
+func _test_render_budget() -> void:
+	var main := _make_main_2v2(true)
+	var game: Game = main.get("game")
+	for _i in int(3.0 / DT):
+		game.tick(DT)
+	var cost := _render_cost(main, {"draws": 0, "tris": 0})
+	var worst := 0
+	for p in game.players:
+		worst = maxi(worst, _model_view(p).tris)
+	print("  2v2: %d chamadas de desenho, %d triângulos, pior personagem %d tris, torcida %d pessoas" % [
+			cost["draws"], cost["tris"], worst, (main.get("court_view") as CourtView).crowd_count])
+	_check(int(cost["draws"]) <= 80 and int(cost["tris"]) <= 60000, "cena dentro do orçamento (≤ 80 chamadas, ≤ 60 k tris)")
+	_check(worst <= 5000, "personagem com ≤ 5 k triângulos")
+	_free_main(main)
+	var m := FpsMeter.new()
+	for i in 600:
+		m.add_frame(1.0 / 30.0 if i % 100 == 0 else 1.0 / 60.0)
+	m.measure()
+	_check(absf(m.avg - 600.0 / (594.0 / 60.0 + 6.0 / 30.0)) < 0.1 and absf(m.p1 - 30.0) < 0.1,
+			"medidor: fps médio %.1f e p1 %.1f (6 quadros lentos em 600)" % [m.avg, m.p1])
+	m.free()
 
 
 func _test_camera() -> void:

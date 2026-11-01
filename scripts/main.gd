@@ -4,6 +4,7 @@ extends Node3D
 ## O App define `config` (e `save`) antes de adicionar a cena; sozinha, roda em rally infinito.
 ## Demo bot x bot: rode com o argumento de usuário  -- --autoplay
 ## Só lógica (simulações rápidas, sem modelos, quadra nem efeitos):  -- --no-views
+## Contador de fps (médio e p1):  -- --fps
 
 signal match_finished(result: MatchResult)
 signal exit_requested
@@ -29,6 +30,7 @@ var cam: Camera3D
 var court_view: CourtView = null    # praia (Fase 4); null com --no-views ou USE_MODEL_VIEWS = false
 var fx: Fx = null                   # efeitos (rastro, areia, brilho, tremor); null com --no-views
 var sfx: Sfx = null                 # sons e música da partida; null com --no-views
+var fps: FpsMeter                   # fps médio/p1 (contador com -- --fps; e2e lê na Web)
 var stats := MatchStats.new()
 var pause_menu: PauseMenu
 var tutorial: TutorialDirector = null
@@ -217,6 +219,8 @@ func _build_ui() -> void:
 		hud.set_mode(Hud.Mode.TUTORIAL)
 	elif not config.endless:
 		hud.set_mode(Hud.Mode.MATCH)
+	fps = FpsMeter.new()
+	add_child(fps)
 	pause_menu = PauseMenu.new()
 	add_child(pause_menu)
 	hud.pause_pressed.connect(pause_game)

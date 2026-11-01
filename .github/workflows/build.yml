@@ -85,6 +85,14 @@ jobs:
           $GODOT --headless --export-release "Web" export/web/index.html
           test -f export/web/index.wasm
 
+      - name: Web size budget (RNF-4.03)
+        run: |
+          # o que o navegador baixa vem comprimido (Pages serve gzip): o limite vale para isso
+          raw=$(( $(stat -c%s export/web/index.wasm) + $(stat -c%s export/web/index.pck) ))
+          gz=$(( $(gzip -9c export/web/index.wasm | wc -c) + $(gzip -9c export/web/index.pck | wc -c) ))
+          echo "Web wasm+pck: $((raw / 1048576)) MB sem compressão, $((gz / 1048576)) MB em gzip (limite 40 MB)"
+          test "$gz" -le $((40 * 1048576))
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -111,6 +119,9 @@ jobs:
           mkdir -p export/android
           $GODOT --headless --export-debug "Android" export/android/volei-mobile.apk
           test -f export/android/volei-mobile.apk
+          size=$(stat -c%s export/android/volei-mobile.apk)
+          echo "APK: $((size / 1048576)) MB (limite 60 MB, RNF-4.03)"
+          test "$size" -le $((60 * 1048576))
 
       - uses: actions/upload-artifact@v4
         with:
