@@ -26,6 +26,7 @@ var controls: TouchControls
 var hud: Hud
 var markers: Markers
 var cam: Camera3D
+var court_view: CourtView = null    # praia (Fase 4); null com --no-views ou USE_MODEL_VIEWS = false
 var stats := MatchStats.new()
 var pause_menu: PauseMenu
 var tutorial: TutorialDirector = null
@@ -60,6 +61,8 @@ func _process(_delta: float) -> void:
 	controls.action_hot = game.is_hot(_me())
 	controls.queue_redraw()
 	hud.set_board(game.rules, game.rally_touches, game.best_rally)
+	if court_view != null:
+		court_view.react((game.rally_touches - 4) / 10.0)
 	hud.show_serve_picker(_can_pick_serve(), game.serve_type[human.team])
 	_update_badge()
 
@@ -81,7 +84,11 @@ func _build_world() -> void:
 	add_child(sun)
 
 	court_spec = CourtSpec.for_mode(config.mode)
-	if views:
+	if views and Tuning.USE_MODEL_VIEWS:
+		court_view = CourtView.new()
+		court_view.spec = court_spec
+		add_child(court_view)
+	elif views:
 		var court := Court.new()
 		court.spec = court_spec
 		add_child(court)
@@ -309,6 +316,8 @@ func _on_whiff(p: Player, why: String) -> void:
 
 
 func _on_point(team: int, reason: String) -> void:
+	if court_view != null:
+		court_view.react(0.0, 1.2)
 	if team == human.team:
 		hud.message("Ponto seu! " + reason, Color(0.55, 1.0, 0.65))
 	else:

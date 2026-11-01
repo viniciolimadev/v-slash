@@ -11,13 +11,14 @@ const SKINS := [Color(0.96, 0.8, 0.66), Color(0.78, 0.57, 0.4), Color(0.55, 0.37
 const HAIRS := [Color(0.15, 0.1, 0.07), Color(0.45, 0.28, 0.12), Color(0.9, 0.75, 0.4), Color(0.08, 0.06, 0.05)]
 
 var uniform := 0                    # 0 = titular, 1 = segundo uniforme (o parceiro no 2v2)
-var joints := {}                    # nome da junta → Node3D
+var skeleton: Skeleton3D
+var tris := 0                       # triângulos do modelo (orçamento: ≤ 5 k)
 var shot_clip := ""                 # clipe de toque agendado ou tocando ("" = só locomoção)
 var shot_start := 0.0               # início do clipe no relógio do Game
 var pose := {}                      # última pose aplicada
 
-var _hips: Node3D
 var _tilt: Node3D
+var _bone_idx := {}                 # nome da junta → índice do osso
 var _plan_seen := -1
 var _shot_live := false
 var _phase := 0.0
@@ -25,42 +26,52 @@ var _blend_from := {}
 var _blend_t := 0.0
 
 
+## Um Skeleton3D (11 ossos) e uma malha só, com cada peça presa ao seu osso: 1 chamada de desenho.
 func _build() -> void:
-	var idx := game.players.find(player) if game != null else 0
-	var skin: Color = SKINS[maxi(idx, 0) % SKINS.size()]
-	var hair: Color = HAIRS[maxi(idx, 0) % HAIRS.size()]
+	var idx := maxi(game.players.find(player), 0)
+	var skin: Color = SKINS[idx % SKINS.size()]
+	var hair: Color = HAIRS[idx % HAIRS.size()]
 	var jersey := player.color
 	var trim := Color(0.97, 0.97, 0.97) if uniform == 0 else player.color.darkened(0.55)
 	var shorts := player.color.darkened(0.6) if uniform == 0 else Color(0.95, 0.95, 0.95)
 	_tilt = Node3D.new()
 	body.add_child(_tilt)
-	_hips = _joint(_tilt, "hips", Vector3(0.0, HIP_H, 0.0))
-	add_mesh(_hips, _box(Vector3(0.36, 0.2, 0.22)), Vector3(0.0, -0.02, 0.0), shorts)
+	skeleton = Skeleton3D.new()
+	_tilt.add_child(skeleton)
+	var kit := MeshKit.new()
+	var hips := _bone("hips", -1, Vector3(0.0, HIP_H, 0.0))
+	_part(kit, hips, MeshKit.box(Vector3(0.36, 0.2, 0.22)), Vector3(0.0, -0.02, 0.0), shorts)
 	for side: float in [-1.0, 1.0]:
 		var s := "l" if side < 0.0 else "r"
-		var leg := _joint(_hips, "leg_" + s, Vector3(side * 0.1, -0.06, 0.0))
-		add_mesh(leg, _limb(0.075, 0.46), Vector3(0.0, -0.23, 0.0), skin)
-		add_mesh(leg, _box(Vector3(0.17, 0.12, 0.2)), Vector3(0.0, -0.04, 0.0), shorts)
-		var shin := _joint(leg, "shin_" + s, Vector3(0.0, -0.45, 0.0))
-		add_mesh(shin, _limb(0.06, 0.44), Vector3(0.0, -0.22, 0.0), skin)
-		add_mesh(shin, _box(Vector3(0.11, 0.08, 0.24)), Vector3(0.0, -0.46, -0.05), trim)
-	var spine := _joint(_hips, "spine", Vector3(0.0, 0.06, 0.0))
-	# camisa: bloco de frente reta (a cor do time precisa ler bem de costas, ver e2e)
-	add_mesh(spine, _box(Vector3(0.46, 0.58, 0.24)), Vector3(0.0, 0.3, 0.0), jersey)
-	add_mesh(spine, _box(Vector3(0.48, 0.07, 0.26)), Vector3(0.0, 0.58, 0.0), trim)
-	var head := _joint(spine, "head", Vector3(0.0, 0.62, 0.0))
-	add_mesh(head, _limb(0.055, 0.1), Vector3(0.0, 0.04, 0.0), skin)
-	add_mesh(head, _ball(0.13), Vector3(0.0, 0.2, 0.0), skin)
-	add_mesh(head, _ball(0.135, true), Vector3(0.0, 0.23, 0.02), hair)
-	add_mesh(head, _box(Vector3(0.05, 0.04, 0.06)), Vector3(0.0, 0.18, -0.13), skin.darkened(0.15))
+		var leg := _bone("leg_" + s, hips, Vector3(side * 0.1, -0.06, 0.0))
+		_part(kit, leg, MeshKit.cyl(0.075, 0.064, 0.46), Vector3(0.0, -0.23, 0.0), skin)
+		_part(kit, leg, MeshKit.box(Vector3(0.17, 0.12, 0.2)), Vector3(0.0, -0.04, 0.0), shorts)
+		var shin := _bone("shin_" + s, leg, Vector3(0.0, -0.45, 0.0))
+		_part(kit, shin, MeshKit.cyl(0.06, 0.05, 0.44), Vector3(0.0, -0.22, 0.0), skin)
+		_part(kit, shin, MeshKit.box(Vector3(0.11, 0.08, 0.24)), Vector3(0.0, -0.46, -0.05), trim)
+	var spine := _bone("spine", hips, Vector3(0.0, 0.06, 0.0))
+	# camisa: bloco de costas reto (a cor do time precisa ler bem de costas, ver e2e)
+	_part(kit, spine, MeshKit.box(Vector3(0.46, 0.58, 0.24)), Vector3(0.0, 0.3, 0.0), jersey)
+	_part(kit, spine, MeshKit.box(Vector3(0.48, 0.07, 0.26)), Vector3(0.0, 0.58, 0.0), trim)
+	var head := _bone("head", spine, Vector3(0.0, 0.62, 0.0))
+	_part(kit, head, MeshKit.cyl(0.055, 0.055, 0.1), Vector3(0.0, 0.04, 0.0), skin)
+	_part(kit, head, MeshKit.sphere(0.13), Vector3(0.0, 0.2, 0.0), skin)
+	_part(kit, head, MeshKit.sphere(0.135, true), Vector3(0.0, 0.22, 0.02), hair)
+	_part(kit, head, MeshKit.box(Vector3(0.05, 0.04, 0.06)), Vector3(0.0, 0.18, -0.13), skin.darkened(0.15))
 	for side: float in [-1.0, 1.0]:
 		var s := "l" if side < 0.0 else "r"
-		var arm := _joint(spine, "arm_" + s, Vector3(side * 0.29, 0.52, 0.0))
-		add_mesh(arm, _box(Vector3(0.14, 0.14, 0.15)), Vector3(0.0, -0.03, 0.0), jersey)
-		add_mesh(arm, _limb(0.055, 0.3), Vector3(0.0, -0.15, 0.0), skin)
-		var fore := _joint(arm, "fore_" + s, Vector3(0.0, -0.3, 0.0))
-		add_mesh(fore, _limb(0.05, 0.28), Vector3(0.0, -0.14, 0.0), skin)
-		add_mesh(fore, _box(Vector3(0.08, 0.1, 0.05)), Vector3(0.0, -0.32, 0.0), skin)
+		var arm := _bone("arm_" + s, spine, Vector3(side * 0.29, 0.52, 0.0))
+		_part(kit, arm, MeshKit.box(Vector3(0.14, 0.14, 0.15)), Vector3(0.0, -0.03, 0.0), jersey)
+		_part(kit, arm, MeshKit.cyl(0.055, 0.047, 0.3), Vector3(0.0, -0.15, 0.0), skin)
+		var fore := _bone("fore_" + s, arm, Vector3(0.0, -0.3, 0.0))
+		_part(kit, fore, MeshKit.cyl(0.05, 0.042, 0.28), Vector3(0.0, -0.14, 0.0), skin)
+		_part(kit, fore, MeshKit.box(Vector3(0.08, 0.1, 0.05)), Vector3(0.0, -0.32, 0.0), skin)
+	tris = kit.tris
+	var mi := MeshInstance3D.new()
+	mi.mesh = kit.build()
+	skeleton.add_child(mi)
+	mi.skeleton = NodePath("..")
+	mi.skin = skeleton.create_skin_from_rest_transforms()
 	game.point_scored.connect(_on_point)
 	_apply(AnimTable.READY)
 
@@ -161,41 +172,23 @@ func _loco_pose(delta: float) -> Dictionary:
 
 func _apply(p: Dictionary) -> void:
 	pose = p
-	_hips.position.y = HIP_H + float(p.get("drop", 0.0))
+	skeleton.set_bone_pose_position(_bone_idx["hips"], Vector3(0.0, HIP_H + float(p.get("drop", 0.0)), 0.0))
 	for j in AnimTable.JOINTS:
-		(joints[j] as Node3D).rotation_degrees = p.get(j, Vector3.ZERO)
+		var e: Vector3 = p.get(j, Vector3.ZERO)
+		skeleton.set_bone_pose_rotation(_bone_idx[j], Quaternion.from_euler(e * (PI / 180.0)))
 
 
-func _joint(parent: Node3D, joint_name: String, pos: Vector3) -> Node3D:
-	var n := Node3D.new()
-	n.name = joint_name
-	n.position = pos
-	parent.add_child(n)
-	joints[joint_name] = n
-	return n
+## Osso com a posição de repouso relativa ao pai (o mesmo layout de juntas da AnimTable).
+func _bone(bone_name: String, parent: int, pos: Vector3) -> int:
+	var i := skeleton.add_bone(bone_name)
+	if parent >= 0:
+		skeleton.set_bone_parent(i, parent)
+	skeleton.set_bone_rest(i, Transform3D(Basis.IDENTITY, pos))
+	skeleton.set_bone_pose_position(i, pos)
+	_bone_idx[bone_name] = i
+	return i
 
 
-func _box(s: Vector3) -> BoxMesh:
-	var m := BoxMesh.new()
-	m.size = s
-	return m
-
-
-func _limb(radius: float, height: float) -> CylinderMesh:
-	var m := CylinderMesh.new()
-	m.top_radius = radius
-	m.bottom_radius = radius * 0.85
-	m.height = height
-	m.radial_segments = 6
-	m.rings = 1
-	return m
-
-
-func _ball(radius: float, half := false) -> SphereMesh:
-	var m := SphereMesh.new()
-	m.radius = radius
-	m.height = radius * 2.0
-	m.radial_segments = 8
-	m.rings = 5
-	m.is_hemisphere = half
-	return m
+## Peça presa ao osso, posicionada em coordenadas do osso.
+func _part(kit: MeshKit, bone: int, mesh: Mesh, at: Vector3, color: Color) -> void:
+	kit.add(mesh, skeleton.get_bone_global_rest(bone) * Transform3D(Basis.IDENTITY, at), color, bone)
