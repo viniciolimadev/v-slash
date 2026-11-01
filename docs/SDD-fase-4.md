@@ -224,6 +224,7 @@ Implementada em 2026-11-01 (versão 0.5.0).
 | Orçamento (RNF-4.02) | ≤ 80 chamadas, ≤ 60 k tris, ≤ 5 k por personagem | 2v2: 24 chamadas, 9,5 k tris, 660 tris por personagem, 92 pessoas na torcida |
 | Eventos com som (RF-4.07) | todos | 13 sinais do `Game` pedem um som existente; 28 SFX + 2 músicas = 1,2 MB |
 | Alvos de toque (RF-4.09) | ≥ 64 px em 720p | 26 botões/controles nas telas, pausa e HUD |
-| Tamanho (RNF-4.03) | APK ≤ 60 MB, Web ≤ 40 MB | medido e conferido no CI a cada execução (passo "Web size budget" e export do APK) |
+| Tamanho (RNF-4.03) | APK ≤ 60 MB, Web ≤ 40 MB | CI do PR #15: APK de debug 28 MB; Web wasm + pck 39 MB sem compressão, 10 MB em gzip (conferido a cada execução) |
+| Fps no e2e | registro | Chromium com swiftshader (CPU, sem GPU) no CI: médio 10, p1 6,9 — só registro; o número que vale é o do aparelho |
 
 **Em aberto (precisa do aparelho):** RNF-4.01 (60 fps / p1 ≥ 50 no Android de entrada e no Galaxy — o contador `-- --fps` e o e2e já medem), RNF-4.04 (tempo de carregamento) e os critérios 3 (ações reconhecíveis por quem não conhece o jogo) e 1 (registro no README).
