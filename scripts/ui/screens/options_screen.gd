@@ -51,7 +51,7 @@ func _slider(text: String, key: String, lo: float, hi: float, value: float, appl
 	slider.max_value = hi
 	slider.step = 0.05 if hi <= 1.0 else 0.1
 	slider.value = value
-	slider.custom_minimum_size = Vector2(BUTTON_SIZE.x, 48.0)
+	slider.custom_minimum_size = Vector2(BUTTON_SIZE.x, 64.0)
 	slider.focus_mode = Control.FOCUS_NONE
 	column.add_child(slider)
 	E2eHooks.publish(screen_name + "/" + key, slider)

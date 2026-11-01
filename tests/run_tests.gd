@@ -35,7 +35,7 @@ func _run() -> void:
 	print("== controles de toque ==")
 	_test_touch_controls()
 	print("== HUD (layout) ==")
-	_test_hud_layout()
+	await _test_hud_layout()
 	print("== mira ==")
 	_test_aim()
 	print("== assistência de mira ==")
@@ -82,6 +82,8 @@ func _run() -> void:
 	_test_left_handed()
 	print("== tutorial ==")
 	_test_tutorial()
+	print("== tema: alvos de toque ==")
+	_test_theme_targets()
 	print("== fluxo de telas (App) ==")
 	_test_app_flow()
 	print("== duração: humano casual x Fácil ==")
@@ -514,6 +516,9 @@ func _test_hud_layout() -> void:
 	_check(root.size.is_equal_approx(screen), "HUD ocupa a tela toda (%s)" % root.size)
 	_check(c.size.is_equal_approx(screen), "controles de toque ocupam a tela toda (%s)" % c.size)
 	var score := hud.get("_score") as Label
+	# a placa do placar se ajusta ao texto no quadro seguinte
+	await process_frame
+	await process_frame
 	_check(absf(score.get_global_rect().get_center().x - screen.x * 0.5) < 2.0, "placar centralizado")
 	var lvl := hud.get("_level_btn") as Button
 	var r := lvl.get_global_rect()
@@ -1675,6 +1680,55 @@ func _buttons(scr: Screen) -> Array[Button]:
 		if c is Button:
 			out.append(c)
 	return out
+
+
+func _all_controls(n: Node, out: Array[Control]) -> Array[Control]:
+	for c in n.get_children():
+		if c is Button or c is HSlider:
+			out.append(c)
+		_all_controls(c, out)
+	return out
+
+
+## RF-4.09: com o tema novo, todo botão e controle deslizante das telas tem ≥ 64 px de altura em 720p.
+func _test_theme_targets() -> void:
+	var path := "user://test_theme.cfg"
+	DirAccess.remove_absolute(path)
+	var app: Node = load("res://scenes/app.tscn").instantiate()
+	app.set("save", SaveData.new(path))
+	root.add_child(app)
+	_check(ThemeDB.get_default_theme().has_constant("installed", "UiTheme")
+			and ThemeDB.fallback_font is FontVariation, "tema e fonte do jogo instalados")
+	var small: Array[String] = []
+	var count := 0
+	var st := MatchStats.new()
+	var opens := {
+		"título": func() -> void: app.call("show_title"),
+		"escolha": func() -> void: app.call("show_level_select"),
+		"opções": func() -> void: app.call("show_options", func() -> void: pass),
+		"resultado": func() -> void: app.call("show_result", MatchResult.new(0, 0, [Vector2i(15, 9)], st)),
+	}
+	for k in opens:
+		(opens[k] as Callable).call()
+		for c in _all_controls(app.get("screen"), []):
+			count += 1
+			if c.get_combined_minimum_size().y < 64.0:
+				small.append("%s/%s" % [k, c.get("text") if c is Button else "slider"])
+	var pm := PauseMenu.new()
+	root.add_child(pm)
+	pm.open(true)
+	var main := _make_main_cfg(MatchConfig.from_save(SaveData.new(path), 0))
+	var hud: Hud = main.get("hud")
+	for c in _all_controls(pm, []) + [hud.get("_pause_btn")] + (hud.get("_serve_btns") as Array):
+		count += 1
+		if (c as Control).get_combined_minimum_size().y < 64.0:
+			small.append("pausa-hud/%s" % (c as Button).text)
+	_check(small.is_empty() and count >= 18, "%d alvos de toque com ≥ 64 px (menores: %s)" % [count, small])
+	_free_main(main)
+	pm.free()
+	root.remove_child(app)
+	app.free()
+	DirAccess.remove_absolute(path)
 
 
 func _test_app_flow() -> void:

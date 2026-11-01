@@ -3,18 +3,25 @@ extends Control
 ## Base das telas de menu: fundo, coluna centralizada e botões grandes para o polegar.
 ## Cada tela monta o conteúdo em _build() e avisa o App por sinais.
 
-const BG := Color(0.09, 0.15, 0.23)
+const ENTER_TIME := 0.2                      # s do esmaecer de entrada
 const BUTTON_SIZE := Vector2(420.0, 72.0)    # alvo de toque >= 64 px de altura (RNF-1.04)
 const GAP := 14.0
 
 var screen_name := "screen"                  # chave do e2e (window.__vs.screen)
 var column: VBoxContainer
+var dim := false                             # true = fundo escuro translúcido (pausa) em vez da praia
 
 
 func _ready() -> void:
+	UiTheme.install()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg := ColorRect.new()
-	bg.color = BG
+	var bg: Control
+	if dim:
+		var rect := ColorRect.new()
+		rect.color = Color(0.0, 0.0, 0.0, 0.6)
+		bg = rect
+	else:
+		bg = ScreenBackdrop.new()
 	add_child(bg)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var center := CenterContainer.new()
@@ -25,6 +32,9 @@ func _ready() -> void:
 	center.add_child(column)
 	_build()
 	E2eHooks.set_screen(screen_name)
+	# entrada: só esmaece (não desloca: o e2e mede os botões no primeiro quadro)
+	center.modulate.a = 0.0
+	create_tween().tween_property(center, "modulate:a", 1.0, ENTER_TIME)
 
 
 func _build() -> void:
@@ -42,8 +52,8 @@ func add_line(text: String, font_size := 26, color := Color(0.85, 0.9, 1.0)) -> 
 	var ls := LabelSettings.new()
 	ls.font_size = font_size
 	ls.font_color = color
-	ls.outline_size = maxi(2, int(font_size * 0.12))
-	ls.outline_color = Color(0.0, 0.0, 0.0, 0.6)
+	ls.outline_size = maxi(4, int(font_size * 0.18))
+	ls.outline_color = UiTheme.INK
 	l.label_settings = ls
 	column.add_child(l)
 	return l

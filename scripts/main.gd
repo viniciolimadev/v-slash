@@ -43,6 +43,7 @@ func _ready() -> void:
 		views = false
 	if config == null:
 		config = MatchConfig.new()
+	UiTheme.install()
 	_setup_input()
 	_build_world()
 	_build_match()
@@ -60,6 +61,7 @@ func _physics_process(delta: float) -> void:
 func _process(_delta: float) -> void:
 	markers.refresh()
 	controls.action_label = game.action_label(_me())
+	controls.action_act = game.current_act(_me())
 	controls.action_hot = game.is_hot(_me())
 	controls.queue_redraw()
 	hud.set_board(game.rules, game.rally_touches, game.best_rally)
