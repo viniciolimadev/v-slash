@@ -15,8 +15,8 @@ func _init() -> void:
 
 func _build() -> void:
 	add_title("VÔLEI MOBILE", 64)
-	if save != null and save.best_rally > 0:
-		add_line("Recorde de rally: %d toques" % save.best_rally)
+	if save != null and save.best_rally_any() > 0:
+		add_line("Recorde de rally: %d toques" % save.best_rally_any())
 	add_space(18.0)
 	add_button("JOGAR", "play", func() -> void: play_pressed.emit())
 	add_button("TUTORIAL", "tutorial", func() -> void: tutorial_pressed.emit())

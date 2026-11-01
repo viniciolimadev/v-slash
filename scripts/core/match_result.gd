@@ -4,6 +4,7 @@ extends RefCounted
 
 var winner: int
 var level: int
+var mode: int = MatchConfig.Mode.ONE_V_ONE
 var sets: Array[Vector2i]
 var stats: MatchStats
 var unlocked := -1                  # nível liberado por esta vitória (-1 = nenhum); preenchido pelo save

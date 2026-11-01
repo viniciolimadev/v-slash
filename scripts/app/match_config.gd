@@ -15,8 +15,9 @@ var vibration := true
 var serve_type := ServeType.Kind.UNDER
 
 
-static func from_save(save: SaveData, level: int) -> MatchConfig:
+static func from_save(save: SaveData, level: int, p_mode: int = Mode.ONE_V_ONE) -> MatchConfig:
 	var c := MatchConfig.new()
+	c.mode = p_mode
 	c.bot_level = level
 	c.endless = false
 	c.aim_sens = save.aim_sens

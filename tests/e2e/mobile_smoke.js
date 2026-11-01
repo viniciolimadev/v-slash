@@ -1,7 +1,7 @@
 // Teste de ponta a ponta no navegador, emulando um celular na horizontal com toque.
 // Abre a versão Web e percorre título → escolha do bot → tutorial (pular) → partida;
 // na partida arrasta o analógico, escolhe o saque flutuante, saca e confere (pelos pixels da tela) que o jogador
-// azul realmente se moveu; depois pausa e sai para o menu.
+// azul realmente se moveu; depois pausa e sai para o menu. Por fim abre uma partida 2v2.
 // O jogo publica a tela atual e a posição dos botões em window.__vs (scripts/ui/e2e_hooks.gd).
 //
 //   node tests/e2e/mobile_smoke.js <url-ou-pasta-export/web> [pasta-dos-prints]
@@ -176,6 +176,21 @@ async function playerCenter(decoder, png) {
   await tap('pause/quit');
   await screenIs('title');
   await shot('9-de-volta-ao-titulo');
+
+  // 2v2: alternador na escolha do bot, partida com a dica da troca de controle
+  await tap('title/play');
+  await screenIs('level');
+  await tap('level/2v2');
+  await shot('10-escolha-2v2');
+  await tap('level/0');
+  await screenIs('match');
+  await page.waitForTimeout(1500);
+  const duo = await shot('11-partida-2v2');
+  check(duo !== null, 'partida 2v2 carregou e o seu jogador aparece');
+  await tap('hud/pause');
+  await screenIs('pause');
+  await tap('pause/quit');
+  await screenIs('title');
 
   check(errors.length === 0, 'sem erros no console' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   console.log('prints em ' + outDir);

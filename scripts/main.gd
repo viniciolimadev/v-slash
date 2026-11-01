@@ -152,6 +152,15 @@ func _build_match() -> void:
 		tutorial.finished.connect(func(skipped: bool) -> void: tutorial_finished.emit(skipped))
 
 
+## Primeira partida 2v2: faixa explicando a troca de controle (uma vez por save).
+func _show_first_hint() -> void:
+	if config.mode != MatchConfig.Mode.TWO_V_TWO or autoplay or save == null or save.hint_2v2_done:
+		return
+	hud.banner("O controle passa para quem vai tocar na bola", Color(1.0, 0.95, 0.65), Tuning.HINT_SECS)
+	save.hint_2v2_done = true
+	save.save_file()
+
+
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 1
@@ -190,6 +199,7 @@ func _build_ui() -> void:
 	game.point_scored.connect(_on_point)
 	game.set_over.connect(_on_set_over)
 	game.match_over.connect(_on_match_over)
+	_show_first_hint()
 
 
 ## Quem você controla agora (no 2v2 muda durante o rally; no 1v1 é sempre `human`).
@@ -299,7 +309,9 @@ func finish_match() -> void:
 	if _finished or game.rules.winner < 0:
 		return
 	_finished = true
-	match_finished.emit(MatchResult.new(game.rules.winner, config.bot_level, game.rules.history, stats))
+	var r := MatchResult.new(game.rules.winner, config.bot_level, game.rules.history, stats)
+	r.mode = config.mode
+	match_finished.emit(r)
 
 
 # ---------------------------------------------------------------- pausa e opções

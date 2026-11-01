@@ -1289,53 +1289,77 @@ func _test_save() -> void:
 	DirAccess.remove_absolute(path)
 	var s := SaveData.new(path)
 	s.load_file()
-	_check(s.unlocked_level == 0 and not s.tutorial_done and s.aim_sens == 1.0 and s.vibration,
+	var one := s.rec(MatchConfig.Mode.ONE_V_ONE)
+	_check(one.unlocked_level == 0 and not s.tutorial_done and s.aim_sens == 1.0 and s.vibration,
 			"sem arquivo: valores padrão")
-	s.unlocked_level = 1
+	one.unlocked_level = 1
 	s.tutorial_done = true
-	s.best_rally = 12
-	s.wins = [3, 1, 0]
-	s.losses = [0, 2, 0]
+	one.best_rally = 12
+	one.wins = [3, 1, 0]
+	one.losses = [0, 2, 0]
+	s.rec(MatchConfig.Mode.TWO_V_TWO).wins = [1, 0, 0]
+	s.hint_2v2_done = true
 	s.aim_sens = 1.4
 	s.left_handed = true
 	s.vibration = false
 	_check(s.save_file() == OK and not FileAccess.file_exists(path + ".tmp"), "grava sem deixar arquivo temporário")
 	var r := SaveData.new(path)
 	r.load_file()
-	_check(r.unlocked_level == 1 and r.tutorial_done and r.best_rally == 12 and r.wins == [3, 1, 0]
-			and r.losses == [0, 2, 0] and is_equal_approx(r.aim_sens, 1.4) and r.left_handed and not r.vibration,
-			"ida e volta de todos os campos")
+	var r1 := r.rec(MatchConfig.Mode.ONE_V_ONE)
+	_check(r1.unlocked_level == 1 and r.tutorial_done and r1.best_rally == 12 and r1.wins == [3, 1, 0]
+			and r1.losses == [0, 2, 0] and is_equal_approx(r.aim_sens, 1.4) and r.left_handed and not r.vibration
+			and r.rec(MatchConfig.Mode.TWO_V_TWO).wins == [1, 0, 0] and r.hint_2v2_done,
+			"ida e volta de todos os campos (os dois modos)")
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	f.store_string("isto não é um ConfigFile [[[")
 	f.close()
 	r = SaveData.new(path)
 	r.load_file()
-	_check(r.unlocked_level == 0 and r.wins == [0, 0, 0], "arquivo ilegível: valores padrão")
+	_check(r.rec(0).unlocked_level == 0 and r.rec(0).wins == [0, 0, 0], "arquivo ilegível: valores padrão")
 	var cfg := ConfigFile.new()
 	cfg.set_value("progress", "unlocked_level", 9)
 	cfg.set_value("options", "aim_sens", 50.0)
 	cfg.set_value("records", "wins", ["x", -4])
 	cfg.save(path)
 	r.load_file()
-	_check(r.unlocked_level == 2 and r.aim_sens == SaveData.AIM_SENS_MAX and r.wins == [0, 0, 0],
+	_check(r.rec(0).unlocked_level == 2 and r.aim_sens == SaveData.AIM_SENS_MAX and r.rec(0).wins == [0, 0, 0],
 			"valores fora do limite são cortados")
+	# save da versão 2 (sem modo): tudo vai para o 1v1; o 2v2 começa do zero
+	var v2 := ConfigFile.new()
+	v2.set_value("meta", "version", 2)
+	v2.set_value("progress", "unlocked_level", 2)
+	v2.set_value("records", "best_rally", 17)
+	v2.set_value("records", "wins", [4, 2, 1])
+	v2.set_value("records", "losses", [1, 3, 5])
+	v2.save(path)
+	r = SaveData.new(path)
+	r.load_file()
+	var two := r.rec(MatchConfig.Mode.TWO_V_TWO)
+	_check(r.rec(0).unlocked_level == 2 and r.rec(0).best_rally == 17 and r.rec(0).wins == [4, 2, 1]
+			and r.rec(0).losses == [1, 3, 5] and two.unlocked_level == 0 and two.wins == [0, 0, 0] and not r.hint_2v2_done,
+			"migração da versão 2: o progresso vira o do 1v1")
 	var st := MatchStats.new()
 	st.best_rally = 9
 	var fresh := SaveData.new(path)
 	var win := MatchResult.new(0, 0, [Vector2i(15, 3), Vector2i(15, 4)], st)
 	fresh.record_result(win)
-	_check(fresh.unlocked_level == 1 and win.unlocked == 1 and fresh.wins[0] == 1 and fresh.best_rally == 9,
+	_check(fresh.rec(0).unlocked_level == 1 and win.unlocked == 1 and fresh.rec(0).wins[0] == 1 and fresh.rec(0).best_rally == 9,
 			"vencer o Fácil libera o Médio")
 	var again := MatchResult.new(0, 0, [], st)
 	fresh.record_result(again)
-	_check(fresh.unlocked_level == 1 and again.unlocked == -1, "vencer de novo não libera nada novo")
+	_check(fresh.rec(0).unlocked_level == 1 and again.unlocked == -1, "vencer de novo não libera nada novo")
 	var loss := MatchResult.new(1, 1, [], st)
 	fresh.record_result(loss)
-	_check(fresh.losses[1] == 1 and fresh.unlocked_level == 1, "derrota conta e não libera")
-	fresh.unlocked_level = 2
+	_check(fresh.rec(0).losses[1] == 1 and fresh.rec(0).unlocked_level == 1, "derrota conta e não libera")
+	fresh.rec(0).unlocked_level = 2
 	var top := MatchResult.new(0, 2, [], st)
 	fresh.record_result(top)
-	_check(fresh.unlocked_level == 2 and top.unlocked == -1, "vencer o Difícil mantém o nível 2")
+	_check(fresh.rec(0).unlocked_level == 2 and top.unlocked == -1, "vencer o Difícil mantém o nível 2")
+	var duo := MatchResult.new(0, 0, [], st)
+	duo.mode = MatchConfig.Mode.TWO_V_TWO
+	fresh.record_result(duo)
+	_check(fresh.rec(1).unlocked_level == 1 and fresh.rec(1).wins[0] == 1 and fresh.rec(0).wins[0] == 2,
+			"vitória no 2v2 conta e libera só no 2v2")
 	DirAccess.remove_absolute(path)
 
 
@@ -1491,13 +1515,25 @@ func _test_app_flow() -> void:
 	_check(res is ResultScreen and (res as ResultScreen).result.unlocked == 1, "resultado aparece e avisa o Médio liberado")
 	var r := SaveData.new(path)
 	r.load_file()
-	_check(r.wins[0] == 1 and r.unlocked_level == 1 and r.tutorial_done, "vitória gravada no arquivo")
+	_check(r.rec(0).wins[0] == 1 and r.rec(0).unlocked_level == 1 and r.tutorial_done, "vitória gravada no arquivo")
 	app.call("start_match", 1)
 	m = app.get("match_node")
 	m.pause_game()
 	_check(paused and m.pause_menu.visible, "partida do App pausa")
 	m.pause_menu.quit_pressed.emit()
 	_check(app.get("screen") is TitleScreen and not paused, "Sair para o menu volta ao título e despausa")
+	# 2v2: alternador na escolha, progresso próprio, dica de primeira partida
+	app.call("show_level_select")
+	var sel: LevelSelectScreen = app.get("screen")
+	sel.set_mode(MatchConfig.Mode.TWO_V_TWO)
+	btns = _buttons(sel)
+	_check(btns.size() == 4 and not btns[0].disabled and btns[1].disabled, "2v2: só o Fácil liberado (progresso próprio)")
+	btns[0].pressed.emit()
+	m = app.get("match_node")
+	_check(m != null and m.game.players.size() == 4 and not m.game.rules.same_player_twice and save.hint_2v2_done,
+			"2v2 abre com 4 jogadores, regra de dupla e a dica")
+	m.pause_game()
+	m.pause_menu.quit_pressed.emit()
 	root.remove_child(app)
 	app.free()
 	DirAccess.remove_absolute(path)

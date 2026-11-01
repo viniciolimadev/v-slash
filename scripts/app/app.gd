@@ -49,23 +49,23 @@ func show_options(back: Callable) -> void:
 func show_result(r: MatchResult) -> void:
 	var s := ResultScreen.new()
 	s.result = r
-	s.rematch_pressed.connect(func() -> void: start_match(r.level))
+	s.rematch_pressed.connect(func() -> void: start_match(r.level, r.mode))
 	s.change_level_pressed.connect(show_level_select)
 	s.menu_pressed.connect(show_title)
 	_show(s)
 
 
 ## Abre uma partida. Na primeira vez, passa antes pelo tutorial.
-func start_match(level: int) -> void:
+func start_match(level: int, mode: int = MatchConfig.Mode.ONE_V_ONE) -> void:
 	if not save.tutorial_done:
-		start_tutorial(level)
+		start_tutorial(level, mode)
 		return
-	var m := _open_match(MatchConfig.from_save(save, level))
+	var m := _open_match(MatchConfig.from_save(save, level, mode))
 	m.match_finished.connect(_on_match_finished)
 
 
-## then_level = nível a jogar depois do tutorial; -1 = volta ao título.
-func start_tutorial(then_level: int) -> void:
+## then_level = nível a jogar depois do tutorial (no modo then_mode); -1 = volta ao título.
+func start_tutorial(then_level: int, then_mode: int = MatchConfig.Mode.ONE_V_ONE) -> void:
 	var cfg := MatchConfig.from_save(save, 0)
 	cfg.endless = true
 	cfg.tutorial = true
@@ -74,7 +74,7 @@ func start_tutorial(then_level: int) -> void:
 		save.tutorial_done = true
 		save.save_file()
 		if then_level >= 0:
-			start_match(then_level)
+			start_match(then_level, then_mode)
 		else:
 			show_title())
 
